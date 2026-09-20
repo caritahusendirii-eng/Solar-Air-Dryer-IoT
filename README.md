@@ -1,4 +1,6 @@
-# Smart AC Dashboard
+# Solar-Air-Dryer-IoT (Smart AC Dashboard)
+
+An Internet of Things (IoT)-based smart solar drying system designed to monitor and optimize the drying process in real-time. This project leverages robust cloud infrastructure and database systems to ensure efficient operation.
 
 Aplikasi monitoring suhu & kelembaban dan kontrol Blower AC menggunakan ESP32, DHT22, Relay 2 Channel, dengan dashboard **React (Web)** dan **Flutter (Mobile)**.
 
