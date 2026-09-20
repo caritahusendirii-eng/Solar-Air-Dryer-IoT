@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Lampiran A1 Kode Sumber</title>
+  
+<style>
+  body { font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #333; max-width: 900px; margin: 0 auto; padding: 2rem; }
+  h1, h2, h3 { color: #1e3a8a; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.5rem; margin-top: 2rem; }
+  pre { background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 8px; overflow-x: auto; font-size: 13px; font-family: Consolas, Monaco, "Andale Mono", "Ubuntu Mono", monospace; }
+  code { font-family: Consolas, Monaco, "Andale Mono", monospace; background: #f3f4f6; padding: 0.2rem 0.4rem; border-radius: 4px; color: #be185d; font-size: 0.9em; }
+  pre code { background: none; padding: 0; color: inherit; }
+  table { width: 100%; border-collapse: collapse; margin-top: 1rem; margin-bottom: 1rem; }
+  th, td { border: 1px solid #d1d5db; padding: 0.75rem; text-align: left; }
+  th { background-color: #f3f4f6; font-weight: 600; }
+  tr:nth-child(even) { background-color: #f9fafb; }
+  .hljs-keyword { color: #569cd6; font-weight: bold; }
+  .hljs-string { color: #ce9178; }
+  .hljs-number { color: #b5cea8; }
+  .hljs-built_in { color: #4ec9b0; }
+  .hljs-comment { color: #6a9955; font-style: italic; }
+  .hljs-title { color: #dcdcaa; }
+</style>
+
+</head>
+<body>
+  <h1>LAMPIRAN A - DOKUMENTASI KODE SUMBER (BAGIAN 1)</h1>
+<h2>Sistem Solar Dryer IoT - Source Code Lengkap</h2>
+<hr>
+<h2>1. FIRMWARE ESP32</h2>
+<h3>File: <code>esp32/smart_ac.ino</code></h3>
+<p><strong>Deskripsi</strong>: Firmware utama ESP32 untuk membaca 10 sensor DHT22, mengontrol blower BTS7960 via PWM, logging ke SD Card, dan sinkronisasi data ke Firebase Realtime Database.</p>
+<pre class="hljs"><code> * SOLAR DRYER IOT - ESP32 FIRMWARE (AUTO + MANUAL VERSION + NTP RTC CALIBRATION)
+ * ================================
+ * This system monitors 5 DHT22 sensors &amp; 5 DS18B20 sensors, logs data to SD card,
+ * and syncs with Firebase RTDB. Blower supports AUTO and MANUAL control via Firebase.
+ * RTC automatically calibrates via Internet (NTP) on startup.
+ * * HARDWARE WIRING:
+ * -------------------------------------------------------------
+ * Component         | ESP32 Pin | Details
+ * ------------------|-----------|------------------------------
+ * DHT22 (1-5)       | 32, 33, 25, 27, 26
+ * DS18B20 (6-10)    | 14, 17, 13, 16, 4  &lt;-- PASTIKAN PAKAI RESISTOR PULL-UP 4.7K
+ * Blower 1 (RPWM)   | 2         | Connect to RPWM on BTS7960
+ * Blower 1 (Enable) | 15        | (DIPINDAH DARI PIN 4) R_EN &amp; L_EN on BTS7960
+ * Blower 1 (LPWM)   | GND       | Connect to ESP32 GND
+ * SD Card CS        | 5         | SPI CS
+ * SD Card SCK       | 18        | SPI SCK
+ * SD Card MISO      | 19        | SPI MISO
+ * SD Card MOSI      | 23        | SPI MOSI
+ * RTC SDA           | 21        | I2C SDA
+ * RTC SCL           | 22        | I2C SCL
+ * -------------------------------------------------------------
+ */
+
+#include &lt;WiFi.h&gt;
+#include &quot;time.h&quot;                // LIBRARY TAMBAHAN UNTUK NTP WAKTU INTERNET
+#include &lt;Firebase_ESP_Client.h&gt;
+#include &lt;DHT.h&gt;
+#include &lt;Wire.h&gt;
+#include &lt;RTClib.h&gt;
+#include &lt;SPI.h&gt;
+#include &lt;SD.h&gt;
+#include &lt;OneWire.h&gt;             // LIBRARY TAMBAHAN UNTUK DS18B20
+#include &lt;DallasTemperature.h&gt;   // LIBRARY TAMBAHAN UNTUK DS18B20
+#include &lt;addons/TokenHelper.h&gt;
+#include &lt;addons/RTDBHelper.h&gt;
+
+// ======================== KONFIGURASI ========================
+
+// WiFi Credentials
+#define WIFI_SSID     &quot;POCO X3 NFC&quot;
+#define WIFI_PASSWORD &quot;abcd1234&quot;
+
+// Define Firebase credentials
+#define API_KEY &quot;AIzaSyA-T8JuoAYfUoBVJvu0Vt-I3WSYgJsgHME&quot;
+#define DATABASE_URL &quot;https://solar-air-dryer-iot-f797f-default-rtdb.asia-southeast1.firebasedatabase.app/&quot;
+#define USER_EMAIL &quot;abel@rizky.com&quot;
+#define USER_PASSWORD &quot;Iot123&quot;
+
+#define JUMLAH_SENSOR 10
+
+// === DHT22 Sensor (5 unit pertama) ===
+#define DHTTYPE DHT22
+#define JUMLAH_DHT 5
+int dhtPins[JUMLAH_DHT] = {32, 33, 25, 27, 26};
+DHT dhtSensors[JUMLAH_DHT] = {
+  DHT(32, DHTTYPE), DHT(33, DHTTYPE), DHT(25, DHTTYPE),
+  DHT(27, DHTTYPE), DHT(26, DHTTYPE)
+};
+
+// === DS18B20 Sensor (5 unit terakhir) ===
+#define JUMLAH_DS 5
+int dsPins[JUMLAH_DS] = {14, 17, 13, 16, 4};
+OneWire oneWire[JUMLAH_DS] = { OneWire(14), OneWire(17), OneWire(13), OneWire(16), OneWire(4) };
+DallasTemperature dsSensors[JUMLAH_DS]; // Di-inisialisasi di setup()
+
+// === Kipas / Blower (BTS7960) ===
+#define JUMLAH_KIPAS 1
+int relayPins[JUMLAH_KIPAS] = {2};   // Pin RPWM (Sinyal PWM Speed)
+int enablePins[JUMLAH_KIPAS] = {15}; // DIPINDAH KE PIN 15 AGAR TIDAK BENTROK DENGAN PIN 4 (DS18B20)
+
+// === SD Card ===
+#define SD_CS_PIN 5
+
+// === Interval (ms) ===
+#define SENSOR_INTERVAL    60000
+#define HISTORY_INTERVAL   60000
+
+// ======================== VARIABEL GLOBAL ========================
+
+RTC_DS3231 rtc;
+bool sdReady = false;
+
+FirebaseData fbdo;
+FirebaseData streamFans;
+FirebaseAuth fbAuth;
+FirebaseConfig fbConfig;
+
+float sensorTemp[JUMLAH_SENSOR];
+float sensorHum[JUMLAH_SENSOR];
+float avgTemp = 0;
+float avgHum  = 0;
+
+int kipasSpeed[JUMLAH_KIPAS] = {0};
+String controlMode = &quot;auto&quot;;  // Mode kontrol: &quot;auto&quot; atau &quot;manual&quot;
+
+unsigned long lastSensorRead  = 0;
+unsigned long lastHistoryPush = 0;
+unsigned long lastWiFiCheck   = 0;
+int lastLoggedMinute = -1;
+
+// ======================== HELPER ========================
+
+String getHumidityCategory(float h) {
+  if (isnan(h)) return &quot;N/A&quot;;
+  if (h &lt; 30)      return &quot;Rendah&quot;;
+  else if (h &lt;= 60) return &quot;Sedang&quot;;
+  return &quot;Tinggi&quot;;
+}
+
+void setBlowerSpeed(int idx, int speedPct) {
+  if (idx &lt; 0 || idx &gt;= JUMLAH_KIPAS) return;
+  if (speedPct &lt; 0) speedPct = 0;
+  if (speedPct &gt; 100) speedPct = 100;
+  
+  kipasSpeed[idx] = speedPct;
+  if (relayPins[idx] &gt;= 0) {
+    int pwmValue = map(speedPct, 0, 100, 0, 255);
+    
+    // Logika khusus BTS7960: Nyalakan Enable pin saat kecepatan &gt; 0
+    if (speedPct &gt; 0) {
+      digitalWrite(enablePins[idx], HIGH); // Aktifkan driver
+      analogWrite(relayPins[idx], pwmValue); // Kirim sinyal PWM
+    } else {
+      analogWrite(relayPins[idx], 0); // Hentikan PWM
+      digitalWrite(enablePins[idx], LOW); // Matikan driver (hemat daya)
+    }
+  }
+  Serial.printf(&quot;  Kipas %d → %d%%\n&quot;, idx + 1, speedPct);
+}
+
+// ======================== AUTO CONTROL ========================
+
+void autoControlBlower() {
+  if (avgTemp == 0 &amp;&amp; avgHum == 0) return;
+
+  int targetSpeed = 0;
+
+  if (avgTemp &gt;= 55.0) {
+    targetSpeed = 100;
+  } else if (avgTemp &gt;= 49.0) {
+    targetSpeed = 75;
+  } else if (avgTemp &gt;= 42.0) {
+    targetSpeed = 50;
+  } else if (avgTemp &gt;= 35.0) {
+    targetSpeed = 25;
+  } else {
+    targetSpeed = 0;
+  }
+
+  if (kipasSpeed[0] != targetSpeed) {
+    Serial.printf(&quot;  [AUTO] Suhu: %.1f°C → Blower diubah ke %d%%\n&quot;, avgTemp, targetSpeed);
+    setBlowerSpeed(0, targetSpeed);
+
+    if (Firebase.ready()) {
+      Firebase.RTDB.setInt(&amp;fbdo, &quot;/blowers/blower1/speed&quot;, targetSpeed);
+    }
+  }
+}
+
+// ======================== WIFI ========================
+
+void connectWiFi() {
+  Serial.printf(&quot;Connecting to WiFi: %s&quot;, WIFI_SSID);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
+  unsigned long startAttemptTime = millis();
+  
+  while (WiFi.status() != WL_CONNECTED &amp;&amp; millis() - startAttemptTime &lt; 20000) {
+    Serial.print(&quot;.&quot;);
+    delay(500);
+  }
+
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println(&quot;\n❌ Connection Failed! System will continue and retry in loop.&quot;);
+  } else {
+    Serial.printf(&quot;\n✅ Connected! IP: %s\n&quot;, WiFi.localIP().toString().c_str());
+  }
+}
+
+// ======================== NTP SYNC WAKTU ========================
+
+void syncNTPtoRTC() {
+  const char* ntpServer = &quot;pool.ntp.org&quot;;
+  const long  gmtOffset_sec = 25200; // Offset WIB = 7 jam * 3600
+  const int   daylightOffset_sec = 0;
+
+  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+  Serial.println(&quot;Mengambil waktu dari NTP Server...&quot;);
+
+  struct tm timeinfo;
+  if (getLocalTime(&amp;timeinfo, 10000)) { // Tunggu maksimal 10 detik
+    // Update RTC dengan waktu dari Internet
+    rtc.adjust(DateTime(timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday, 
+                        timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec));
+    Serial.println(&quot;✅ RTC berhasil dikalibrasi via Internet (NTP)!&quot;);
+  } else {
+    Serial.println(&quot;❌ Gagal sinkronisasi NTP, menggunakan waktu RTC yang ada.&quot;);
+  }
+}
+
+// ======================== FIREBASE ========================
+
+void fanStreamCallback(FirebaseStream data) {
+  if (controlMode != &quot;manual&quot;) return;
+  if (data.dataType() != &quot;int&quot; &amp;&amp; data.dataType() != &quot;double&quot; &amp;&amp; data.dataType() != &quot;float&quot;) return;
+
+  String path = data.dataPath();
+  for (int i = 0; i &lt; JUMLAH_KIPAS; i++) {
+    if (path == &quot;/blower&quot; + String(i + 1) + &quot;/speed&quot;) {
+      setBlowerSpeed(i, data.intData());
+      break;
+    }
+  }
+}
+
+void controlModeCallback(FirebaseStream data) {
+  if (data.dataType() != &quot;string&quot;) return;
+  String newMode = data.stringData();
+  if (newMode == &quot;auto&quot; || newMode == &quot;manual&quot;) {
+    controlMode = newMode;
+    Serial.printf(&quot;  [MODE] Kontrol diubah ke: %s\n&quot;, controlMode.c_str());
+    
+    if (controlMode == &quot;auto&quot;) {
+      autoControlBlower();
+    }
+  }
+}
+
+void controlModeTimeoutCallback(bool timeout) {
+  if (timeout) Serial.println(&quot;Control mode stream timeout, resuming...&quot;);
+}
+
+void streamTimeoutCallback(bool timeout) {
+  if (timeout) Serial.println(&quot;Stream timeout, resuming...&quot;);
+}
+
+void initFirebase() {
+  fbConfig.api_key      = API_KEY;
+  fbConfig.database_url = DATABASE_URL;
+  fbAuth.user.email     = USER_EMAIL;
+  fbAuth.user.password  = USER_PASSWORD;
+  fbConfig.token_status_callback = tokenStatusCallback;
+
+  Firebase.begin(&amp;fbConfig, &amp;fbAuth);
+  Firebase.reconnectNetwork(true);
+
+  fbdo.setBSSLBufferSize(1024, 1024);
+  fbdo.setResponseSize(1024);
+  streamFans.setBSSLBufferSize(2048, 1024);
+  streamFans.setResponseSize(1024);
+
+  Serial.println(&quot;Menunggu autentikasi Firebase...&quot;);
+  int timeout = 0;
+  while (!Firebase.ready() &amp;&amp; timeout &lt; 50) {
+    delay(100);
+    timeout++;
+  }
+  
+  if (Firebase.ready()) {
+    Serial.println(&quot;Firebase terhubung!&quot;);
+  } else {
+    Serial.println(&quot;Firebase Auth Timeout (menunggu WiFi terhubung di background...)&quot;);
+  }
+
+  for (int i = 0; i &lt; JUMLAH_KIPAS; i++) {
+    String key = &quot;/blowers/blower&quot; + String(i + 1);
+    Firebase.RTDB.setInt(&amp;fbdo, key + &quot;/speed&quot;, 0);
+    Firebase.RTDB.setString(&amp;fbdo, key + &quot;/name&quot;, &quot;Blower &quot; + String(i + 1));
+  }
+  
+  Firebase.RTDB.setString(&amp;fbdo, &quot;/control_mode&quot;, &quot;auto&quot;);
+  controlMode = &quot;auto&quot;;
+
+  Firebase.RTDB.beginStream(&amp;streamFans, &quot;/blowers&quot;);
+  Firebase.RTDB.setStreamCallback(&amp;streamFans, fanStreamCallback, streamTimeoutCallback);
+
+  static FirebaseData streamMode;
+  streamMode.setBSSLBufferSize(1024, 512);
+  Firebase.RTDB.beginStream(&amp;streamMode, &quot;/control_mode&quot;);
+  Firebase.RTDB.setStreamCallback(&amp;streamMode, controlModeCallback, controlModeTimeoutCallback);
+}
+
+// ======================== HELPER JSON ========================
+
+void buildDetailedJson(FirebaseJson &amp;json, DateTime now) {
+  FirebaseJsonArray sensors;
+  
+  char dateBuf[11];
+  sprintf(dateBuf, &quot;%04d-%02d-%02d&quot;, now.year(), now.month(), now.day());
+  char timeBuf[9];
+  sprintf(timeBuf, &quot;%02d:%02d:%02d&quot;, now.hour(), now.minute(), now.second());
+
+  json.set(&quot;avg_t&quot;, avgTemp);
+  json.set(&quot;avg_h&quot;, avgHum);
+  json.set(&quot;tanggal&quot;, dateBuf);
+  json.set(&quot;waktu&quot;, timeBuf);
+
+  for (int i = 0; i &lt; JUMLAH_SENSOR; i++) {
+    FirebaseJson s;
+    s.set(&quot;sensor&quot;, i + 1);
+    
+    if (isnan(sensorTemp[i])) {
+      s.set(&quot;t&quot;, &quot;null&quot;); 
+    } else {
+      s.set(&quot;t&quot;, sensorTemp[i]);
+    }
+    
+    if (isnan(sensorHum[i])) {
+      s.set(&quot;h&quot;, &quot;null&quot;); 
+    } else {
+      s.set(&quot;h&quot;, sensorHum[i]);
+    }
+    
+    sensors.add(s);
+  }
+  json.set(&quot;sensor_data&quot;, sensors);
+}
+
+// ======================== BACA SENSOR ========================
+
+void readAllSensors() {
+  float totalT = 0, totalH = 0;
+  int validCountT = 0;
+  int validCountH = 0;
+
+  DateTime now = rtc.now();
+  Serial.printf(&quot;\n=== %04d-%02d-%02d %02d:%02d:%02d ===\n&quot;,
+    now.year(), now.month(), now.day(),
+    now.hour(), now.minute(), now.second());
+
+  // 1. Baca 5 Sensor DHT22
+  for (int i = 0; i &lt; JUMLAH_DHT; i++) {
+    sensorTemp[i] = dhtSensors[i].readTemperature();
+    sensorHum[i]  = dhtSensors[i].readHumidity();
+
+    if (!isnan(sensorTemp[i]) &amp;&amp; !isnan(sensorHum[i])) {
+      totalT += sensorTemp[i];
+      totalH += sensorHum[i];
+      validCountT++;
+      validCountH++;
+      Serial.printf(&quot;  Sensor %2d (DHT): %.1f°C | %.1f%% (%s)\n&quot;,
+        i + 1, sensorTemp[i], sensorHum[i],
+        getHumidityCategory(sensorHum[i]).c_str());
+    } else {
+      Serial.printf(&quot;  Sensor %2d (DHT): GAGAL\n&quot;, i + 1);
+    }
+  }
+
+  // 2. Baca 5 Sensor DS18B20
+  for (int i = 0; i &lt; JUMLAH_DS; i++) {
+    int idx = i + JUMLAH_DHT; // Index 5 - 9
+    dsSensors[i].requestTemperatures();
+    float t = dsSensors[i].getTempCByIndex(0);
+
+    if (t != DEVICE_DISCONNECTED_C &amp;&amp; t != 85.0) { // 85.0 adalah kode error default DS18B20
+      sensorTemp[idx] = t;
+      sensorHum[idx]  = NAN; // DS18B20 tidak punya sensor kelembaban
+      
+      totalT += t;
+      validCountT++;
+      
+      Serial.printf(&quot;  Sensor %2d (DS18): %.1f°C | N/A  (Tanpa Kelembaban)\n&quot;, idx + 1, t);
+    } else {
+      sensorTemp[idx] = NAN;
+      sensorHum[idx]  = NAN;
+      Serial.printf(&quot;  Sensor %2d (DS18): GAGAL\n&quot;, idx + 1);
+    }
+  }
+
+  // Hitung Rata-rata
+  if (validCountT &gt; 0) avgTemp = totalT / validCountT; else avgTemp = 0;
+  if (validCountH &gt; 0) avgHum  = totalH / validCountH; else avgHum = 0;
+  
+  if (validCountT &gt; 0 || validCountH &gt; 0) {
+    Serial.printf(&quot;  Rata-rata : %.1f°C | %.1f%% (Suhu: %d valid, Hum: %d valid)\n&quot;,
+      avgTemp, avgHum, validCountT, validCountH);
+      
+    if (controlMode == &quot;auto&quot;) {
+      autoControlBlower();
+    }
+  }
+
+  // Update ke Firebase
+  if (Firebase.ready()) {
+    FirebaseJson detailedData;
+    buildDetailedJson(detailedData, now);
+    Firebase.RTDB.setJSON(&amp;fbdo, &quot;/sensor_data&quot;, &amp;detailedData);
+  }
+
+  // Update SD Card
+  if (sdReady &amp;&amp; now.minute() != lastLoggedMinute) {
+    lastLoggedMinute = now.minute();
+    logToSD(now);
+  }
+}
+
+// ======================== SD CARD LOGGING ========================
+
+void logToSD(DateTime now) {
+  String logLine = String(now.year()) + &quot;-&quot; +
+    (now.month() &lt; 10 ? &quot;0&quot; : &quot;&quot;) + String(now.month()) + &quot;-&quot; +
+    (now.day()   &lt; 10 ? &quot;0&quot; : &quot;&quot;) + String(now.day())   + &quot;,&quot; +
+    (now.hour()  &lt; 10 ? &quot;0&quot; : &quot;&quot;) + String(now.hour())  + &quot;:&quot; +
+    (now.minute()&lt; 10 ? &quot;0&quot; : &quot;&quot;) + String(now.minute()) + &quot;:&quot; +
+    (now.second()&lt; 10 ? &quot;0&quot; : &quot;&quot;) + String(now.second());
+
+  for (int i = 0; i &lt; JUMLAH_SENSOR; i++) {
+    // Log Suhu
+    if (!isnan(sensorTemp[i])) {
+      logLine += &quot;,&quot; + String(sensorTemp[i], 1);
+    } else {
+      logLine += &quot;,NAN&quot;;
+    }
+    
+    // Log Kelembaban
+    if (!isnan(sensorHum[i])) {
+      logLine += &quot;,&quot; + String(sensorHum[i], 1);
+    } else {
+      logLine += &quot;,NAN&quot;;
+    }
+  }
+
+  File dataFile = SD.open(&quot;/data.csv&quot;, FILE_APPEND);
+  if (dataFile) {
+    dataFile.println(logLine);
+    dataFile.close();
+    Serial.println(&quot;  SD: Data disimpan&quot;);
+  } else {
+    Serial.println(&quot;  SD: Gagal menyimpan!&quot;);
+  }
+}
+
+// ======================== FIREBASE HISTORY ========================
+
+void pushHistory() {
+  if (avgTemp == 0 &amp;&amp; avgHum == 0) return;
+  if (!Firebase.ready()) return;
+
+  DateTime now = rtc.now();
+  FirebaseJson entry;
+  buildDetailedJson(entry, now);
+  entry.set(&quot;timestamp/.sv&quot;, &quot;timestamp&quot;);
+
+  if (Firebase.RTDB.pushJSON(&amp;fbdo, &quot;/history&quot;, &amp;entry)) {
+    Serial.println(&quot;  Firebase: History pushed (detailed)&quot;);
+  }
+}
+
+// ======================== SETUP ========================
+
+void setup() {
+  Serial.begin(115200);
+  delay(2000);
+  Serial.println(&quot;\n=============================&quot;);
+  Serial.println(&quot;  Solar Dryer IoT - AUTO + MANUAL&quot;);
+  Serial.println(&quot;=============================\n&quot;);
+
+  // --- Init DHT22 Sensor ---
+  Serial.println(&quot;[1/6] Init 5 sensor DHT22...&quot;);
+  for (int i = 0; i &lt; JUMLAH_DHT; i++) {
+    dhtSensors[i].begin();
+  }
+  Serial.println(&quot;      OK&quot;);
+
+  // --- Init DS18B20 Sensor ---
+  Serial.println(&quot;[2/6] Init 5 sensor DS18B20...&quot;);
+  for (int i = 0; i &lt; JUMLAH_DS; i++) {
+    dsSensors[i].setOneWire(&amp;oneWire[i]);
+    dsSensors[i].begin();
+  }
+  Serial.println(&quot;      OK&quot;);
+
+  // --- Init Kipas (BTS7960) ---
+  Serial.println(&quot;[3/6] Init kipas (BTS7960)...&quot;);
+  for (int i = 0; i &lt; JUMLAH_KIPAS; i++) {
+    if (relayPins[i] &gt;= 0) {
+      pinMode(relayPins[i], OUTPUT);
+      pinMode(enablePins[i], OUTPUT); 
+      
+      digitalWrite(enablePins[i], LOW); 
+      analogWrite(relayPins[i], 0);     
+      
+      Serial.printf(&quot;      Kipas %d → PWM: GPIO %d, EN: GPIO %d\n&quot;, i + 1, relayPins[i], enablePins[i]);
+    }
+  }
+
+  // --- Init RTC DS3231 ---
+  Serial.println(&quot;[4/6] Init RTC DS3231...&quot;);
+  Wire.begin(21, 22);
+  if (!rtc.begin()) {
+    Serial.println(&quot;      GAGAL! RTC tidak terdeteksi.&quot;);
+    while (1);
+  }
+  
+  if (rtc.lostPower()) {
+    Serial.println(&quot;      RTC kehilangan daya, waktu tidak valid sampai NTP sinkron.&quot;);
+  }
+  
+  DateTime now = rtc.now();
+  Serial.printf(&quot;      Waktu Awal RTC → %04d-%02d-%02d %02d:%02d:%02d\n&quot;,
+    now.year(), now.month(), now.day(),
+    now.hour(), now.minute(), now.second());
+
+  // KODE INI DIMATIKAN AGAR TIDAK MENGGANGGU SINKRONISASI NTP
+  // struct timeval tv;
+  // tv.tv_sec = now.unixtime();
+  // tv.tv_usec = 0;
+  // settimeofday(&amp;tv, NULL);
+
+  // --- Init SD Card ---
+  Serial.println(&quot;[5/6] Init SD Card...&quot;);
+  if (SD.begin(SD_CS_PIN)) {
+    sdReady = true;
+    if (!SD.exists(&quot;/data.csv&quot;)) {
+      File f = SD.open(&quot;/data.csv&quot;, FILE_WRITE);
+      if (f) {
+        String header = &quot;Tanggal,Waktu&quot;;
+        for (int i = 1; i &lt;= JUMLAH_SENSOR; i++) {
+          header += &quot;,T&quot; + String(i) + &quot;,H&quot; + String(i);
+        }
+        f.println(header);
+        f.close();
+        Serial.println(&quot;      Header CSV dibuat&quot;);
+      }
+    }
+    Serial.println(&quot;      OK&quot;);
+  } else {
+    Serial.println(&quot;      GAGAL! Lanjut tanpa SD logging.&quot;);
+  }
+
+  // --- WiFi + NTP + Firebase ---
+  Serial.println(&quot;[6/6] Koneksi WiFi, NTP &amp; Firebase...&quot;);
+  connectWiFi();
+  
+  // Sinkronisasi waktu otomatis setelah WiFi terhubung
+  if(WiFi.status() == WL_CONNECTED) {
+    syncNTPtoRTC();
+  }
+
+  initFirebase();
+
+  Serial.println(&quot;\n✅ Sistem siap! Blower di mode AUTO / MANUAL.\n&quot;);
+}
+
+// ======================== LOOP ========================
+
+void loop() {
+  unsigned long now = millis();
+
+  // Baca sensor setiap 1 menit
+  if (now - lastSensorRead &gt;= SENSOR_INTERVAL) {
+    lastSensorRead = now;
+    readAllSensors();
+  }
+
+  // Push history ke Firebase setiap 1 menit
+  if (now - lastHistoryPush &gt;= HISTORY_INTERVAL) {
+    lastHistoryPush = now;
+    pushHistory();
+  }
+
+  // Reconnect WiFi otomatis jika terputus
+  if (WiFi.status() != WL_CONNECTED) {
+    if (now - lastWiFiCheck &gt;= 15000) {
+      lastWiFiCheck = now;
+      Serial.println(&quot;⏳ WiFi terputus, menunggu auto-reconnect dari ESP32...&quot;);
+    }
+  }
+}
+\n```
+
+---
+
+## 2. REACT WEB DASHBOARD
+
+### File: `react-dashboard/src/firebase.js`
+**Deskripsi**: Konfigurasi dan inisialisasi Firebase SDK untuk web.
+
+```javascript
+import { initializeApp, getApps, getApp } from &quot;firebase/app&quot;;
+import { getDatabase } from &quot;firebase/database&quot;;
+import { getAuth } from &quot;firebase/auth&quot;;
+
+const firebaseConfig = {
+  apiKey: &quot;AIzaSyA-T8JuoAYfUoBVJvu0Vt-I3WSYgJsgHME&quot;,
+  authDomain: &quot;solar-air-dryer-iot-f797f.firebaseapp.com&quot;,
+  databaseURL: &quot;https://solar-air-dryer-iot-f797f-default-rtdb.asia-southeast1.firebasedatabase.app/&quot;,
+  projectId: &quot;solar-air-dryer-iot-f797f&quot;,
+  storageBucket: &quot;solar-air-dryer-iot-f797f.firebasestorage.app&quot;,
+  messagingSenderId: &quot;540412890134&quot;,
+  appId: &quot;1:540412890134:web:9bbc1e61cc2837ad5fb937&quot;,
+  measurementId: &quot;G-6ZF19TNH9H&quot;
+};
+
+let database = null;
+let auth = null;
+try {
+  const app = getApps().length &gt; 0 ? getApp() : initializeApp(firebaseConfig);
+  database = getDatabase(app);
+  auth = getAuth(app);
+} catch (e) {
+  console.warn(&quot;Firebase initialization error:&quot;, e.message);
+}
+
+export { database, auth };
+</code></pre>
+<hr>
+<h3>File: <code>react-dashboard/src/index.js</code></h3>
+<p><strong>Deskripsi</strong>: Entry point aplikasi React, membungkus App dengan AuthProvider.</p>
+<pre class="hljs"><code><span class="hljs-keyword">import</span> <span class="hljs-title class_">React</span> <span class="hljs-keyword">from</span> <span class="hljs-string">&quot;react&quot;</span>;
+<span class="hljs-keyword">import</span> <span class="hljs-title class_">ReactDOM</span> <span class="hljs-keyword">from</span> <span class="hljs-string">&quot;react-dom/client&quot;</span>;
+<span class="hljs-keyword">import</span> <span class="hljs-title class_">App</span> <span class="hljs-keyword">from</span> <span class="hljs-string">&quot;./App&quot;</span>;
+<span class="hljs-keyword">import</span> { <span class="hljs-title class_">AuthProvider</span> } <span class="hljs-keyword">from</span> <span class="hljs-string">&quot;./contexts/AuthContext&quot;</span>;
+
+<span class="hljs-keyword">const</span> root = <span class="hljs-title class_">ReactDOM</span>.<span class="hljs-title function_">createRoot</span>(<span class="hljs-variable language_">document</span>.<span class="hljs-title function_">getElementById</span>(<span class="hljs-string">&quot;root&quot;</span>));
+root.<span class="hljs-title function_">render</span>(
+  <span class="language-xml"><span class="hljs-tag">&lt;<span class="hljs-name">React.StrictMode</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">AuthProvider</span>&gt;</span>
+      <span class="hljs-tag">&lt;<span class="hljs-name">App</span> /&gt;</span>
+    <span class="hljs-tag">&lt;/<span class="hljs-name">AuthProvider</span>&gt;</span>
+  <span class="hljs-tag">&lt;/<span class="hljs-name">React.StrictMode</span>&gt;</span></span>
+);
+</code></pre>
+<hr>
+<h3>File: <code>react-dashboard/src/parseCsv.js</code></h3>
+<p><strong>Deskripsi</strong>: Utilitas untuk parsing data CSV dari SD Card menjadi format yang dapat digunakan oleh chart dan tabel.</p>
+<pre class="hljs"><code><span class="hljs-keyword">const</span> <span class="hljs-variable constant_">SENSOR_COUNT</span> = <span class="hljs-number">10</span>;
+
+<span class="hljs-keyword">export</span> <span class="hljs-keyword">function</span> <span class="hljs-title function_">parseDummyCsv</span>(<span class="hljs-params">text</span>) {
+  <span class="hljs-keyword">const</span> lines = text.<span class="hljs-title function_">trim</span>().<span class="hljs-title function_">split</span>(<span class="hljs-string">&quot;\n&quot;</span>);
+  <span class="hljs-keyword">const</span> rows = lines.<span class="hljs-title function_">slice</span>(<span class="hljs-number">1</span>);
+  <span class="hljs-keyword">const</span> history = [];
+  <span class="hljs-keyword">for</span> (<span class="hljs-keyword">const</span> row <span class="hljs-keyword">of</span> rows) {
+    <span class="hljs-keyword">const</span> cols = row.<span class="hljs-title function_">split</span>(<span class="hljs-string">&quot;,&quot;</span>);
+    <span class="hljs-keyword">if</span> (cols.<span class="hljs-property">length</span> &lt; <span class="hljs-number">22</span>) <span class="hljs-keyword">continue</span>;
+    <span class="hljs-keyword">const</span> rawDate = cols[<span class="hljs-number">0</span>].<span class="hljs-title function_">trim</span>();
+    <span class="hljs-keyword">const</span> rawTime = cols[<span class="hljs-number">1</span>].<span class="hljs-title function_">trim</span>();
+    <span class="hljs-keyword">const</span> <span class="hljs-title function_">pad</span> = (<span class="hljs-params">v</span>) =&gt; <span class="hljs-title class_">String</span>(v).<span class="hljs-title function_">padStart</span>(<span class="hljs-number">2</span>, <span class="hljs-string">&quot;0&quot;</span>);
+    <span class="hljs-keyword">let</span> isoDate;
+    <span class="hljs-keyword">if</span> (rawDate.<span class="hljs-title function_">includes</span>(<span class="hljs-string">&quot;/&quot;</span>)) {
+      <span class="hljs-keyword">const</span> dp = rawDate.<span class="hljs-title function_">split</span>(<span class="hljs-string">&quot;/&quot;</span>);
+      isoDate = <span class="hljs-string">`<span class="hljs-subst">${dp[<span class="hljs-number">2</span>]}</span>-<span class="hljs-subst">${pad(dp[<span class="hljs-number">0</span>])}</span>-<span class="hljs-subst">${pad(dp[<span class="hljs-number">1</span>])}</span>`</span>;
+    } <span class="hljs-keyword">else</span> {
+      <span class="hljs-keyword">const</span> dp = rawDate.<span class="hljs-title function_">split</span>(<span class="hljs-string">&quot;-&quot;</span>);
+      isoDate = <span class="hljs-string">`<span class="hljs-subst">${dp[<span class="hljs-number">0</span>]}</span>-<span class="hljs-subst">${pad(dp[<span class="hljs-number">1</span>])}</span>-<span class="hljs-subst">${pad(dp[<span class="hljs-number">2</span>])}</span>`</span>;
+    }
+    <span class="hljs-keyword">const</span> timeParts = rawTime.<span class="hljs-title function_">split</span>(<span class="hljs-string">&quot;:&quot;</span>);
+    <span class="hljs-keyword">const</span> isoTime = <span class="hljs-string">`<span class="hljs-subst">${pad(timeParts[<span class="hljs-number">0</span>])}</span>:<span class="hljs-subst">${pad(timeParts[<span class="hljs-number">1</span>])}</span>:<span class="hljs-subst">${pad(timeParts[<span class="hljs-number">2</span>] || <span class="hljs-number">0</span>)}</span>`</span>;
+    <span class="hljs-keyword">const</span> ts = <span class="hljs-keyword">new</span> <span class="hljs-title class_">Date</span>(<span class="hljs-string">`<span class="hljs-subst">${isoDate}</span>T<span class="hljs-subst">${isoTime}</span>`</span>).<span class="hljs-title function_">getTime</span>();
+    <span class="hljs-keyword">if</span> (<span class="hljs-built_in">isNaN</span>(ts)) <span class="hljs-keyword">continue</span>;
+    <span class="hljs-keyword">let</span> tSum = <span class="hljs-number">0</span>, hSum = <span class="hljs-number">0</span>, tCount = <span class="hljs-number">0</span>, hCount = <span class="hljs-number">0</span>;
+    <span class="hljs-keyword">const</span> sensors = [];
+    <span class="hljs-keyword">for</span> (<span class="hljs-keyword">let</span> i = <span class="hljs-number">0</span>; i &lt; <span class="hljs-variable constant_">SENSOR_COUNT</span>; i++) {
+      <span class="hljs-keyword">const</span> tRaw = cols[<span class="hljs-number">2</span> + i * <span class="hljs-number">2</span>]?.<span class="hljs-title function_">trim</span>().<span class="hljs-title function_">toUpperCase</span>();
+      <span class="hljs-keyword">const</span> hRaw = cols[<span class="hljs-number">3</span> + i * <span class="hljs-number">2</span>]?.<span class="hljs-title function_">trim</span>().<span class="hljs-title function_">toUpperCase</span>();
+      <span class="hljs-keyword">const</span> tVal = (tRaw &amp;&amp; tRaw !== <span class="hljs-string">&quot;NAN&quot;</span>) ? <span class="hljs-built_in">parseFloat</span>(tRaw) : <span class="hljs-title class_">NaN</span>;
+      <span class="hljs-keyword">const</span> hVal = (hRaw &amp;&amp; hRaw !== <span class="hljs-string">&quot;NAN&quot;</span>) ? <span class="hljs-built_in">parseFloat</span>(hRaw) : <span class="hljs-title class_">NaN</span>;
+      <span class="hljs-keyword">const</span> tOk = !<span class="hljs-built_in">isNaN</span>(tVal) &amp;&amp; tVal &gt; <span class="hljs-number">0</span>;
+      <span class="hljs-keyword">const</span> hOk = !<span class="hljs-built_in">isNaN</span>(hVal) &amp;&amp; hVal &gt; <span class="hljs-number">0</span>;
+      sensors.<span class="hljs-title function_">push</span>({ <span class="hljs-attr">temperature</span>: tOk ? tVal : <span class="hljs-literal">null</span>, <span class="hljs-attr">humidity</span>: hOk ? hVal : <span class="hljs-literal">null</span> });
+      <span class="hljs-keyword">if</span> (tOk) { tSum += tVal; tCount++; }
+      <span class="hljs-keyword">if</span> (hOk) { hSum += hVal; hCount++; }
+    }
+    <span class="hljs-keyword">if</span> (tCount === <span class="hljs-number">0</span>) <span class="hljs-keyword">continue</span>;
+    history.<span class="hljs-title function_">push</span>({
+      <span class="hljs-attr">timestamp</span>: ts,
+      <span class="hljs-attr">temperature</span>: +(tSum / tCount).<span class="hljs-title function_">toFixed</span>(<span class="hljs-number">1</span>),
+      <span class="hljs-attr">humidity</span>: +(hSum / hCount).<span class="hljs-title function_">toFixed</span>(<span class="hljs-number">1</span>),
+      sensors, <span class="hljs-attr">validSensors</span>: tCount,
+    });
+  }
+  <span class="hljs-keyword">return</span> history;
+}
+</code></pre>
+
+</body>
+</html>

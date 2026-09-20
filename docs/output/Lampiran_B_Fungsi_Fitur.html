@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Lampiran B Fungsi Fitur</title>
+  
+<style>
+  body { font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #333; max-width: 900px; margin: 0 auto; padding: 2rem; }
+  h1, h2, h3 { color: #1e3a8a; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.5rem; margin-top: 2rem; }
+  pre { background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 8px; overflow-x: auto; font-size: 13px; font-family: Consolas, Monaco, "Andale Mono", "Ubuntu Mono", monospace; }
+  code { font-family: Consolas, Monaco, "Andale Mono", monospace; background: #f3f4f6; padding: 0.2rem 0.4rem; border-radius: 4px; color: #be185d; font-size: 0.9em; }
+  pre code { background: none; padding: 0; color: inherit; }
+  table { width: 100%; border-collapse: collapse; margin-top: 1rem; margin-bottom: 1rem; }
+  th, td { border: 1px solid #d1d5db; padding: 0.75rem; text-align: left; }
+  th { background-color: #f3f4f6; font-weight: 600; }
+  tr:nth-child(even) { background-color: #f9fafb; }
+  .hljs-keyword { color: #569cd6; font-weight: bold; }
+  .hljs-string { color: #ce9178; }
+  .hljs-number { color: #b5cea8; }
+  .hljs-built_in { color: #4ec9b0; }
+  .hljs-comment { color: #6a9955; font-style: italic; }
+  .hljs-title { color: #dcdcaa; }
+</style>
+
+</head>
+<body>
+  <h1>LAMPIRAN B - FUNGSI DAN CARA KERJA SETIAP FITUR</h1>
+<h2>Sistem Solar Dryer IoT - Monitoring &amp; Kontrol Pengering Surya</h2>
+<hr>
+<h2>1. ARSITEKTUR SISTEM</h2>
+<p>Sistem Solar Dryer IoT terdiri dari 3 komponen utama:</p>
+<table>
+<thead>
+<tr>
+<th>No</th>
+<th>Komponen</th>
+<th>Teknologi</th>
+<th>Fungsi</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Firmware ESP32</td>
+<td>Arduino C++</td>
+<td>Membaca sensor, kontrol blower, logging SD Card</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Web Dashboard</td>
+<td>React.js</td>
+<td>Monitoring &amp; kontrol via browser</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Mobile App</td>
+<td>Flutter (Dart)</td>
+<td>Monitoring &amp; kontrol via Android</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Backend</td>
+<td>Firebase RTDB</td>
+<td>Database real-time, autentikasi</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>2. FITUR FIRMWARE ESP32 (<code>smart_ac.ino</code>)</h2>
+<h3>2.1 Pembacaan Sensor DHT22 (10 Unit)</h3>
+<ul>
+<li><strong>Fungsi</strong>: <code>readAllSensors()</code></li>
+<li><strong>Cara Kerja</strong>: Membaca suhu dan kelembaban dari 10 sensor DHT22 yang terhubung ke pin GPIO (32, 33, 25, 27, 26, 14, 17, 13, 16, 4). Data dibaca setiap 60 detik. Sensor yang gagal dibaca ditandai sebagai NaN dan tidak diikutsertakan dalam perhitungan rata-rata.</li>
+<li><strong>Output</strong>: Rata-rata suhu (<code>avgTemp</code>) dan kelembaban (<code>avgHum</code>) dari sensor yang valid.</li>
+</ul>
+<h3>2.2 Kontrol Blower PWM &amp; Mode Otomatis (BTS7960)</h3>
+<ul>
+<li><strong>Fungsi</strong>: <code>setBlowerSpeed(idx, speedPct)</code> dan <code>autoControlBlower()</code></li>
+<li><strong>Cara Kerja</strong>:
+<ul>
+<li><strong>Mode Manual</strong>: Menerima perintah kecepatan (0-100%) dari Firebase Realtime Database melalui stream callback.</li>
+<li><strong>Mode Otomatis</strong>: Menyesuaikan kecepatan berdasarkan rata-rata suhu sensor secara real-time. Rentang logika: <code>&lt;35°C</code> (OFF/0%), <code>35-41.9°C</code> (25%), <code>42-48.9°C</code> (50%), <code>49-54.9°C</code> (75%), <code>≥55°C</code> (100%).</li>
+</ul>
+</li>
+<li>Pin Enable (EN) diaktifkan saat kecepatan &gt; 0 dan dimatikan saat 0 untuk menghemat daya. Sinyal PWM menggunakan fungsi <code>analogWrite()</code>.</li>
+</ul>
+<h3>2.3 Sinkronisasi Firebase</h3>
+<ul>
+<li><strong>Fungsi</strong>: <code>initFirebase()</code>, <code>fanStreamCallback()</code>, <code>pushHistory()</code></li>
+<li><strong>Cara Kerja</strong>:
+<ul>
+<li><strong>Upload Real-time</strong>: Data sensor dikirim ke node <code>/sensor_data</code> setiap pembacaan sensor.</li>
+<li><strong>Stream Listener</strong>: ESP32 mendengarkan perubahan pada node <code>/blowers</code> untuk menerima perintah kecepatan blower.</li>
+<li><strong>Push History</strong>: Data historis dikirim ke node <code>/history</code> setiap 60 detik dengan server timestamp.</li>
+</ul>
+</li>
+<li><strong>Autentikasi</strong>: Menggunakan Email/Password Firebase Auth.</li>
+</ul>
+<h3>2.4 Logging ke SD Card</h3>
+<ul>
+<li><strong>Fungsi</strong>: <code>logToSD(now)</code></li>
+<li><strong>Cara Kerja</strong>: Data sensor dicatat dalam format CSV ke file <code>/data.csv</code> di SD Card. Header otomatis dibuat saat file belum ada. Pencatatan dilakukan setiap menit (cek berdasarkan <code>lastLoggedMinute</code>).</li>
+<li><strong>Format</strong>: <code>Tanggal,Waktu,T1,H1,T2,H2,...,T10,H10</code></li>
+</ul>
+<h3>2.5 Manajemen Koneksi WiFi</h3>
+<ul>
+<li><strong>Fungsi</strong>: <code>connectWiFi()</code></li>
+<li><strong>Cara Kerja</strong>: ESP32 mencoba terhubung ke WiFi dengan timeout 20 detik. Jika terputus di loop utama, sistem akan menunggu auto-reconnect bawaan ESP32 setiap 15 detik.</li>
+</ul>
+<h3>2.6 RTC DS3231 (Real-Time Clock)</h3>
+<ul>
+<li><strong>Cara Kerja</strong>: Memberikan timestamp akurat untuk pencatatan data. Waktu RTC disinkronkan ke system time ESP32 via <code>settimeofday()</code>.</li>
+</ul>
+<hr>
+<h2>3. FITUR WEB DASHBOARD (React.js)</h2>
+<h3>3.1 Autentikasi &amp; Login (<code>LoginPage.jsx</code>, <code>AuthContext.jsx</code>)</h3>
+<ul>
+<li><strong>Cara Kerja</strong>: Menggunakan Firebase Authentication dengan Email/Password. Setelah login berhasil, data user disimpan ke <code>/users/{uid}</code> dan role default “guess” ditetapkan di <code>/user_akses/{uid}</code>. Session berlaku 1 jam dengan auto-logout.</li>
+<li><strong>Presence System</strong>: Status online/offline user dikelola via node <code>/presence/{uid}</code> dengan <code>onDisconnect()</code> otomatis menghapus saat koneksi terputus.</li>
+</ul>
+<h3>3.2 Role-Based Access Control / RBAC (<code>AuthContext.jsx</code>)</h3>
+<ul>
+<li><strong>5 Level Role</strong>:</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Role</th>
+<th>Level</th>
+<th>Akses Tab</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>guess</code></td>
+<td>0</td>
+<td>Dashboard saja</td>
+</tr>
+<tr>
+<td><code>view_data</code></td>
+<td>1</td>
+<td>Dashboard + Data</td>
+</tr>
+<tr>
+<td><code>eksekusi_data</code></td>
+<td>2</td>
+<td>Dashboard + Control + Data</td>
+</tr>
+<tr>
+<td><code>report_data</code></td>
+<td>3</td>
+<td>Dashboard + Data + Export</td>
+</tr>
+<tr>
+<td><code>admin</code></td>
+<td>4</td>
+<td>Semua (termasuk Management)</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>Cara Kerja</strong>: Fungsi <code>canAccessTab(role, tabId)</code> memeriksa apakah role user memiliki akses ke tab tertentu. Tab yang tidak dapat diakses disembunyikan dari navigasi.</li>
+</ul>
+<h3>3.3 Dashboard Monitoring (<code>App.jsx</code> - Tab Dashboard)</h3>
+<ul>
+<li><strong>Cara Kerja</strong>: Menampilkan data real-time dari Firebase node <code>/sensor_data</code>. Terdapat:
+<ul>
+<li><strong>Info Bar</strong>: Tanggal dan waktu pembacaan terakhir dari ESP32.</li>
+<li><strong>Average Cards</strong>: 2 kartu rata-rata suhu dan kelembaban (<code>SensorCard</code>).</li>
+<li><strong>Individual Sensor Grid</strong>: Grid 10 sensor individual (<code>IndividualSensorCard</code>) menampilkan suhu, kelembaban, dan status aktif/tidak aktif per sensor.</li>
+<li><strong>Grafik Tren</strong>: Chart garis menggunakan Recharts (<code>SensorChart</code>) menampilkan tren historis rata-rata suhu dan kelembaban.</li>
+</ul>
+</li>
+<li><strong>Status Koneksi</strong>: Sistem dianggap online jika data terakhir diterima dalam 120 detik.</li>
+</ul>
+<h3>3.4 Kontrol Blower &amp; Auto Mode (<code>App.jsx</code> - Tab Control, <code>BlowerControl.jsx</code>)</h3>
+<ul>
+<li><strong>Cara Kerja</strong>:
+<ul>
+<li>Menampilkan status 2 blower (aktif/mati, kecepatan %).</li>
+<li><strong>Mode Switch</strong>: Toggle antara kontrol “Otomatis” dan “Manual”. Mode Otomatis akan mematikan interaksi slider (read-only) dan menampilkan tabel referensi suhu.</li>
+<li><strong>Master Blower Control</strong>: Slider PWM (0-100%) untuk pengaturan manual.</li>
+<li>Nilai kecepatan ditulis ke Firebase node <code>/blowers/blower1/speed</code>. Mode kontrol (auto/manual) ditulis ke <code>/control_mode</code>.</li>
+<li>Estimasi RPM ditampilkan (kecepatan × 6000 RPM).</li>
+<li>Notifikasi toast ditampilkan setelah perubahan berhasil/gagal.</li>
+</ul>
+</li>
+</ul>
+<h3>3.5 Riwayat Data Sensor (<code>App.jsx</code> - Tab Data)</h3>
+<ul>
+<li><strong>Cara Kerja</strong>: Menampilkan tabel data historis dari Firebase node <code>/history</code> dengan fitur:
+<ul>
+<li><strong>Search</strong>: Filter berdasarkan tanggal/waktu.</li>
+<li><strong>Pagination</strong>: Menampilkan 5/10/20/50/100/semua data per halaman.</li>
+<li><strong>Tabel Detail</strong>: Menampilkan waktu, rata-rata suhu/kelembaban, dan data individual 10 sensor.</li>
+<li><strong>Export CSV</strong>: (Hanya role <code>report_data</code> dan <code>admin</code>) Mengekspor data ke file CSV. Di platform native (Android), menggunakan Capacitor Filesystem + Share API. Di web, menggunakan Blob download.</li>
+</ul>
+</li>
+</ul>
+<h3>3.6 Management User (<code>ManagementPage.jsx</code>)</h3>
+<ul>
+<li><strong>Cara Kerja</strong> (Hanya Admin):
+<ul>
+<li>Menampilkan statistik: Total Users, Users Online, Admins, Active Roles.</li>
+<li>Tabel daftar user dengan email, status online/offline, current role, last login.</li>
+<li><strong>Ubah Role</strong>: Admin dapat mengubah role user lain via dropdown select.</li>
+<li><strong>Hapus Akses</strong>: Menghapus data <code>/user_akses/{uid}</code> sehingga user kembali ke role “guess”.</li>
+<li><strong>Search</strong>: Filter user berdasarkan email, nama, atau role.</li>
+</ul>
+</li>
+</ul>
+<h3>3.7 Komponen SensorCard (<code>SensorCard.jsx</code>)</h3>
+<ul>
+<li><strong>SensorCard</strong>: Menampilkan rata-rata suhu/kelembaban dengan ikon, nilai numerik, badge “Live”, dan progress bar.</li>
+<li><strong>IndividualSensorCard</strong>: Menampilkan data per sensor dengan indikator aktif (hijau) / tidak aktif (abu-abu).</li>
+</ul>
+<h3>3.8 Komponen SensorChart (<code>SensorChart.jsx</code>)</h3>
+<ul>
+<li><strong>Cara Kerja</strong>: Menggunakan library Recharts untuk menampilkan LineChart dengan 2 garis (suhu oranye, kelembaban biru). Tooltip custom menampilkan nilai pada hover.</li>
+</ul>
+<hr>
+<h2>4. FITUR MOBILE APP (Flutter)</h2>
+<h3>4.1 Entry Point (<code>main.dart</code>)</h3>
+<ul>
+<li>Inisialisasi Firebase dan menjalankan <code>DashboardScreen</code>. Tema dark mode dengan Material3 dan Google Fonts Inter.</li>
+</ul>
+<h3>4.2 Dashboard Screen (<code>dashboard_screen.dart</code>)</h3>
+<ul>
+<li><strong>Cara Kerja</strong>: Mendengarkan stream data dari Firebase untuk sensor, blower, dan history. Menampilkan:
+<ul>
+<li>SensorCard untuk suhu dan kelembaban.</li>
+<li>BlowerControl untuk setiap blower.</li>
+<li>SensorChartWidget untuk grafik historis.</li>
+<li>Indikator koneksi online/offline (heartbeat timer 5 detik, threshold 120 detik).</li>
+</ul>
+</li>
+</ul>
+<h3>4.3 Firebase Service (<code>firebase_service.dart</code>)</h3>
+<ul>
+<li><strong>Cara Kerja</strong>: Menyediakan stream untuk <code>sensor_data</code>, <code>blowers</code>, dan <code>history</code> (limited 1000 entri terakhir). Method <code>setBlowerSpeed()</code> menulis kecepatan ke Firebase.</li>
+</ul>
+<h3>4.4 Blower Control Widget (<code>blower_control.dart</code>)</h3>
+<ul>
+<li><strong>Cara Kerja</strong>: Slider untuk mengatur kecepatan blower (0-100%). Menampilkan estimasi RPM (kecepatan × 2480). Nilai dikirim ke Firebase saat slider dilepas.</li>
+</ul>
+<h3>4.5 Chart Widget (<code>chart_widget.dart</code>)</h3>
+<ul>
+<li><strong>Cara Kerja</strong>: Menggunakan library fl_chart untuk menampilkan grafik garis suhu dan kelembaban. Tooltip menampilkan nilai saat disentuh.</li>
+</ul>
+<h3>4.6 Sensor Card Widget (<code>sensor_card.dart</code>)</h3>
+<ul>
+<li><strong>Cara Kerja</strong>: Menampilkan nilai sensor dengan warna status dinamis:
+<ul>
+<li>Suhu: Hijau (≤28°C), Oranye (28-35°C), Merah (&gt;35°C)</li>
+<li>Kelembaban: Hijau (≤60%), Oranye (60-80%), Merah (&gt;80%)</li>
+</ul>
+</li>
+</ul>
+<hr>
+<h2>5. FIREBASE REALTIME DATABASE RULES (<code>database.rules.json</code>)</h2>
+<table>
+<thead>
+<tr>
+<th>Node</th>
+<th>Read</th>
+<th>Write</th>
+<th>Keterangan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/sensor_data</code></td>
+<td>Public</td>
+<td>Public</td>
+<td>Data sensor ESP32</td>
+</tr>
+<tr>
+<td><code>/blowers</code></td>
+<td>Public</td>
+<td>Public</td>
+<td>Kontrol blower</td>
+</tr>
+<tr>
+<td><code>/control_mode</code></td>
+<td>Public</td>
+<td>Public</td>
+<td>Mode kontrol</td>
+</tr>
+<tr>
+<td><code>/history</code></td>
+<td>Public</td>
+<td>Public</td>
+<td>Data historis</td>
+</tr>
+<tr>
+<td><code>/users</code></td>
+<td>Admin only</td>
+<td>Self only</td>
+<td>Profil user</td>
+</tr>
+<tr>
+<td><code>/user_akses</code></td>
+<td>Admin only</td>
+<td>Admin / new user</td>
+<td>Role management</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>6. ALUR DATA SISTEM (Data Flow)</h2>
+<pre class="hljs"><code>[10x DHT22] → [ESP32] → [Firebase RTDB] → [React Web / Flutter App]
+                 ↕              ↕
+            [SD Card]    [Firebase Auth]
+                              ↕
+                        [User Role Check]
+</code></pre>
+<ol>
+<li>ESP32 membaca 10 sensor DHT22 setiap 60 detik.</li>
+<li>Data rata-rata dan detail sensor dikirim ke Firebase <code>/sensor_data</code>.</li>
+<li>Data historis di-push ke Firebase <code>/history</code> setiap 60 detik.</li>
+<li>Data juga dicatat ke SD Card dalam format CSV.</li>
+<li>Web Dashboard dan Mobile App mendengarkan perubahan data secara real-time.</li>
+<li>User mengontrol blower via dashboard → data ditulis ke <code>/blowers</code> → ESP32 menerima via stream → mengatur PWM motor.</li>
+</ol>
+
+</body>
+</html>

@@ -1,0 +1,1043 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Riwayat Data Sensor – Solar Dryer IoT</title>
+  <meta name="description" content="Tampilan lengkap riwayat data sensor Solar Air Dryer IoT dari Firebase Realtime Database." />
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <!-- Firebase SDK (compat) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+
+  <style>
+    /* ─── Reset & Tokens ─────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --c-bg: #0f1117;
+      --c-surface: #1a1d27;
+      --c-surface2: #21263a;
+      --c-border: rgba(255,255,255,0.07);
+      --c-text: #e2e8f0;
+      --c-muted: #64748b;
+      --c-accent: #f97316;
+      --c-accent2: #06b6d4;
+      --c-t: #fb923c;
+      --c-h: #38bdf8;
+      --c-green: #22c55e;
+      --c-red: #ef4444;
+      --radius: 14px;
+      --radius-sm: 8px;
+      --shadow: 0 4px 24px rgba(0,0,0,0.4);
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--c-bg);
+      color: var(--c-text);
+      min-height: 100vh;
+      padding-bottom: 60px;
+    }
+
+    /* ─── Header ─────────────────────────────────────── */
+    header {
+      background: rgba(26,29,39,0.95);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--c-border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      padding: 0 24px;
+    }
+
+    .header-inner {
+      max-width: 1400px;
+      margin: 0 auto;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #f97316, #fb923c);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      box-shadow: 0 0 12px rgba(249,115,22,0.4);
+    }
+
+    .brand-title {
+      font-size: 17px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .brand-sub {
+      font-size: 11px;
+      color: var(--c-muted);
+      font-weight: 500;
+      display: block;
+      margin-top: 1px;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    /* Live Clock */
+    .live-clock {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(249,115,22,0.1);
+      border: 1px solid rgba(249,115,22,0.2);
+      padding: 6px 14px;
+      border-radius: 12px;
+      transition: all 0.3s ease;
+    }
+
+    .live-clock:hover {
+      background: rgba(249,115,22,0.18);
+      border-color: rgba(249,115,22,0.35);
+    }
+
+    .live-clock-icon {
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+
+    .live-clock-content {
+      display: flex;
+      flex-direction: column;
+      line-height: 1.2;
+    }
+
+    .live-clock-time {
+      font-size: 14px;
+      font-weight: 700;
+      color: #fff;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.5px;
+    }
+
+    .live-clock-date {
+      font-size: 9px;
+      color: var(--c-muted);
+      font-weight: 500;
+    }
+
+    @media (max-width: 500px) {
+      .live-clock-date { display: none; }
+    }
+
+    @media (max-width: 400px) {
+      .live-clock { display: none; }
+    }
+
+    #conn-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      transition: all 0.3s;
+    }
+
+    #conn-badge.loading { background: rgba(100,116,139,0.15); color: var(--c-muted); }
+    #conn-badge.online  { background: rgba(34,197,94,0.15);  color: var(--c-green); }
+    #conn-badge.error   { background: rgba(239,68,68,0.15);  color: var(--c-red);   }
+
+    .conn-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+    /* ─── Main Layout ────────────────────────────────── */
+    .page {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 28px 24px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    /* ─── Page Title ─────────────────────────────────── */
+    .page-title-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .page-title h1 {
+      font-size: 26px;
+      font-weight: 800;
+      color: #fff;
+    }
+
+    .page-title p {
+      font-size: 13px;
+      color: var(--c-muted);
+      margin-top: 4px;
+    }
+
+    /* ─── Stats Bar ──────────────────────────────────── */
+    .stats-bar {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px;
+    }
+
+    .stat-card {
+      background: var(--c-surface);
+      border: 1px solid var(--c-border);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .stat-card:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow);
+    }
+
+    .stat-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--c-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .stat-val {
+      font-size: 28px;
+      font-weight: 800;
+      line-height: 1;
+      color: #fff;
+    }
+
+    .stat-sub {
+      font-size: 11px;
+      color: var(--c-muted);
+    }
+
+    .stat-card.s-accent  .stat-val { color: var(--c-accent); }
+    .stat-card.s-cyan    .stat-val { color: var(--c-accent2); }
+    .stat-card.s-temp    .stat-val { color: var(--c-t); }
+    .stat-card.s-hum     .stat-val { color: var(--c-h); }
+
+    /* ─── Table Panel ────────────────────────────────── */
+    .panel {
+      background: var(--c-surface);
+      border: 1px solid var(--c-border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 18px 20px 16px;
+      border-bottom: 1px solid var(--c-border);
+      flex-wrap: wrap;
+    }
+
+    .panel-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .panel-title-icon {
+      width: 30px; height: 30px;
+      border-radius: 8px;
+      background: rgba(249,115,22,0.15);
+      color: var(--c-accent);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px;
+    }
+
+    /* ─── Controls ───────────────────────────────────── */
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .search-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 12px;
+      color: var(--c-muted);
+      font-size: 15px;
+      pointer-events: none;
+    }
+
+    #search-input {
+      background: var(--c-surface2);
+      border: 1px solid var(--c-border);
+      border-radius: var(--radius-sm);
+      padding: 9px 12px 9px 36px;
+      color: var(--c-text);
+      font-size: 13px;
+      font-family: inherit;
+      width: 220px;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    #search-input:focus {
+      border-color: var(--c-accent);
+      box-shadow: 0 0 0 3px rgba(249,115,22,0.15);
+    }
+
+    #search-input::placeholder { color: var(--c-muted); }
+
+    .rpp-wrap {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      color: var(--c-muted);
+    }
+
+    .rpp-wrap select, #date-filter {
+      background: var(--c-surface2);
+      border: 1px solid var(--c-border);
+      border-radius: var(--radius-sm);
+      padding: 8px 10px;
+      color: var(--c-text);
+      font-size: 13px;
+      font-family: inherit;
+      outline: none;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+
+    .rpp-wrap select:focus, #date-filter:focus {
+      border-color: var(--c-accent);
+    }
+
+    /* ─── Buttons ────────────────────────────────────── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 9px 16px;
+      border-radius: var(--radius-sm);
+      border: none;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      font-family: inherit;
+      transition: all 0.2s;
+      text-decoration: none;
+    }
+
+    .btn-export {
+      background: linear-gradient(135deg, #0ea5e9, #0284c7);
+      color: #fff;
+      box-shadow: 0 3px 10px rgba(14,165,233,0.3);
+    }
+
+    .btn-export:hover { transform: translateY(-1px); box-shadow: 0 5px 14px rgba(14,165,233,0.4); }
+    .btn-export:disabled { background: #1e2535; color: var(--c-muted); cursor: not-allowed; box-shadow: none; transform: none; }
+
+    .btn-refresh {
+      background: var(--c-surface2);
+      color: var(--c-text);
+      border: 1px solid var(--c-border);
+    }
+
+    .btn-refresh:hover { background: rgba(255,255,255,0.06); }
+
+    /* ─── Table ──────────────────────────────────────── */
+    .table-scroll {
+      overflow-x: auto;
+      overflow-y: auto;
+      max-height: 65vh;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      font-size: 12px;
+    }
+
+    thead { position: sticky; top: 0; z-index: 20; }
+
+    /* Row 1 Group headers */
+    thead tr:first-child th {
+      padding: 12px 10px 8px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid var(--c-border);
+      white-space: nowrap;
+    }
+
+    /* Row 2 Sub headers */
+    thead tr:last-child th {
+      padding: 6px 8px 10px;
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      border-bottom: 2px solid var(--c-border);
+    }
+
+    th.th-time  { background: var(--c-surface); color: var(--c-muted); text-align: left; min-width: 100px; }
+    th.th-avg   { background: rgba(249,115,22,0.08); color: var(--c-accent); min-width: 72px; text-align: center; }
+    th.th-sub-avg { background: rgba(249,115,22,0.05); color: #c2410c; text-align: center; }
+    th.th-s     { background: rgba(6,182,212,0.06); color: var(--c-accent2); text-align: center; border-left: 2px solid rgba(6,182,212,0.2); }
+    th.th-sub-s { background: rgba(6,182,212,0.03); color: #0e7490; text-align: center; }
+    th.th-sub-s.s2 { border-left: 2px solid rgba(6,182,212,0.15); }
+    th.th-blank { background: var(--c-surface); }
+
+    tbody tr {
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      transition: background 0.15s;
+    }
+
+    tbody tr:hover { background: rgba(255,255,255,0.03); }
+    tbody tr:last-child td { border-bottom: none; }
+
+    td {
+      padding: 10px 8px;
+      color: var(--c-text);
+      text-align: center;
+      border-right: 1px solid rgba(255,255,255,0.03);
+    }
+
+    td:first-child { text-align: left; padding-left: 16px; }
+
+    .td-date { font-size: 10px; color: var(--c-muted); font-weight: 500; }
+    .td-time { font-size: 13px; font-weight: 700; color: #fff; margin-top: 2px; }
+
+    .v-t { color: var(--c-t); font-weight: 700; }
+    .v-h { color: var(--c-h); font-weight: 700; }
+    .v-null { color: #2d3748; font-weight: 400; }
+
+    td.sep-left { border-left: 2px solid rgba(6,182,212,0.15); }
+
+    /* ─── Table footer ───────────────────────────────── */
+    .table-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 20px;
+      border-top: 1px solid var(--c-border);
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .pagination-info { font-size: 13px; color: var(--c-muted); }
+    .pagination-info b { color: var(--c-text); }
+
+    .pagination-btns { display: flex; align-items: center; gap: 6px; }
+
+    .pg-btn {
+      display: flex; align-items: center; justify-content: center;
+      width: 32px; height: 32px;
+      border-radius: 8px;
+      border: 1px solid var(--c-border);
+      background: var(--c-surface2);
+      color: var(--c-text);
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+
+    .pg-btn:hover:not(:disabled) { background: rgba(249,115,22,0.15); border-color: var(--c-accent); color: var(--c-accent); }
+    .pg-btn.active { background: var(--c-accent); border-color: var(--c-accent); color: #fff; }
+    .pg-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    /* ─── Loading / Empty ────────────────────────────── */
+    .state-row td {
+      padding: 60px 20px;
+      text-align: center;
+    }
+
+    .spinner {
+      width: 36px; height: 36px;
+      border: 3px solid rgba(249,115,22,0.2);
+      border-top-color: var(--c-accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin: 0 auto 14px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .state-msg {
+      font-size: 14px;
+      color: var(--c-muted);
+    }
+
+    /* ─── Scrollbar ──────────────────────────────────── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.18); }
+
+    /* ─── Responsive ─────────────────────────────────── */
+    @media (max-width: 600px) {
+      .page { padding: 16px 12px 0; }
+      .header-inner { padding: 0 12px; }
+      #search-input { width: 160px; }
+      .page-title h1 { font-size: 20px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ─── Header ──────────────────────────────────── -->
+<header>
+  <div class="header-inner">
+    <div class="brand">
+      <div class="brand-icon">☀️</div>
+      <div>
+        <div class="brand-title">Solar Dryer IoT</div>
+        <span class="brand-sub">Riwayat Data Sensor</span>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="live-clock" id="live-clock">
+        <span class="live-clock-icon">🕐</span>
+        <div class="live-clock-content">
+          <span class="live-clock-time" id="clock-time">--:--:--</span>
+          <span class="live-clock-date" id="clock-date">—</span>
+        </div>
+      </div>
+      <div id="conn-badge" class="loading">
+        <span class="conn-dot"></span>
+        <span id="conn-text">Memuat...</span>
+      </div>
+      <a href="/" class="btn btn-refresh" title="Kembali ke Dashboard">← Dashboard</a>
+    </div>
+  </div>
+</header>
+
+<!-- ─── Page ─────────────────────────────────────── -->
+<div class="page">
+
+  <!-- Title -->
+  <div class="page-title-row">
+    <div class="page-title">
+      <h1>📋 Riwayat Data Sensor</h1>
+      <p>Semua data historis dari Firebase /history — diurutkan terbaru terlebih dahulu</p>
+    </div>
+    <button id="btn-refresh" class="btn btn-refresh" onclick="loadHistory()">
+      🔄 Refresh
+    </button>
+  </div>
+
+  <!-- Stats Bar -->
+  <div class="stats-bar">
+    <div class="stat-card s-accent">
+      <div class="stat-label">Total Record</div>
+      <div class="stat-val" id="stat-total">—</div>
+      <div class="stat-sub">entri history</div>
+    </div>
+    <div class="stat-card s-cyan">
+      <div class="stat-label">Record Terfilter</div>
+      <div class="stat-val" id="stat-filtered">—</div>
+      <div class="stat-sub">setelah filter</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Data Terbaru</div>
+      <div class="stat-val" id="stat-latest" style="font-size:16px; margin-top:4px;">—</div>
+      <div class="stat-sub" id="stat-latest-date">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Data Terlama</div>
+      <div class="stat-val" id="stat-oldest" style="font-size:16px; margin-top:4px;">—</div>
+      <div class="stat-sub" id="stat-oldest-date">—</div>
+    </div>
+    <div class="stat-card s-temp">
+      <div class="stat-label">Avg Suhu (°C)</div>
+      <div class="stat-val" id="stat-avg-t">—</div>
+      <div class="stat-sub">semua record</div>
+    </div>
+    <div class="stat-card s-hum">
+      <div class="stat-label">Avg Kelembaban (%)</div>
+      <div class="stat-val" id="stat-avg-h">—</div>
+      <div class="stat-sub">semua record</div>
+    </div>
+  </div>
+
+  <!-- Table Panel -->
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">
+        <div class="panel-title-icon">🗃️</div>
+        Tabel History Lengkap
+      </div>
+      <div class="controls">
+        <!-- Date filter -->
+        <input type="date" id="date-filter" title="Filter berdasarkan tanggal" />
+
+        <!-- Search -->
+        <div class="search-wrap">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="search-input" placeholder="Cari tanggal / waktu..." />
+        </div>
+
+        <!-- Rows per page -->
+        <div class="rpp-wrap">
+          <span>Tampilkan</span>
+          <select id="rpp-select">
+            <option value="10">10</option>
+            <option value="20">20</option>
+            <option value="50" selected>50</option>
+            <option value="100">100</option>
+            <option value="999999">Semua</option>
+          </select>
+          <span>data</span>
+        </div>
+
+        <!-- Export -->
+        <button id="btn-export" class="btn btn-export" disabled onclick="exportCSV()">
+          ⬇️ Export CSV
+        </button>
+
+        <!-- Reset -->
+        <button id="btn-reset" class="btn" style="background: linear-gradient(135deg, #ef4444, #dc2626); color: #fff; box-shadow: 0 3px 10px rgba(239,68,68,0.3);" onclick="resetHistory()" disabled>
+          🗑️ Reset Data
+        </button>
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div class="table-scroll">
+      <table id="history-table">
+        <thead>
+          <tr>
+            <th class="th-time" rowspan="2">Waktu</th>
+            <th class="th-avg" colspan="2">Rata-rata</th>
+            <th class="th-s" colspan="2">Sensor 1</th>
+            <th class="th-s" colspan="2">Sensor 2</th>
+            <th class="th-s" colspan="2">Sensor 3</th>
+            <th class="th-s" colspan="2">Sensor 4</th>
+            <th class="th-s" colspan="2">Sensor 5</th>
+          </tr>
+          <tr>
+            <th class="th-sub-avg">T (°C)</th>
+            <th class="th-sub-avg">H (%)</th>
+            <th class="th-sub-s s2">T (°C)</th><th class="th-sub-s">H (%)</th>
+            <th class="th-sub-s s2">T (°C)</th><th class="th-sub-s">H (%)</th>
+            <th class="th-sub-s s2">T (°C)</th><th class="th-sub-s">H (%)</th>
+            <th class="th-sub-s s2">T (°C)</th><th class="th-sub-s">H (%)</th>
+            <th class="th-sub-s s2">T (°C)</th><th class="th-sub-s">H (%)</th>
+          </tr>
+        </thead>
+        <tbody id="table-body">
+          <tr class="state-row">
+            <td colspan="13">
+              <div class="spinner"></div>
+              <div class="state-msg">Menghubungkan ke Firebase...</div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Footer / Pagination -->
+    <div class="table-footer">
+      <div class="pagination-info" id="pag-info">—</div>
+      <div class="pagination-btns" id="pag-btns"></div>
+    </div>
+  </div>
+
+</div><!-- /page -->
+
+<script>
+  /* ─── Live Clock ────────────────────────────── */
+  (function initClock() {
+    const DAYS = ["Minggu","Senin","Selasa","Rabu","Kamis","Jumat","Sabtu"];
+    const MONTHS = ["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Agu","Sep","Okt","Nov","Des"];
+    function tick() {
+      const now = new Date();
+      const h = String(now.getHours()).padStart(2,"0");
+      const m = String(now.getMinutes()).padStart(2,"0");
+      const s = String(now.getSeconds()).padStart(2,"0");
+      document.getElementById("clock-time").textContent = h + ":" + m + ":" + s;
+      document.getElementById("clock-date").textContent =
+        DAYS[now.getDay()] + ", " + now.getDate() + " " + MONTHS[now.getMonth()] + " " + now.getFullYear();
+    }
+    tick();
+    setInterval(tick, 1000);
+  })();
+
+  /* ─── Firebase Config ───────────────────────── */
+  const firebaseConfig = {
+    apiKey: "AIzaSyA-T8JuoAYfUoBVJvu0Vt-I3WSYgJsgHME",
+    authDomain: "solar-air-dryer-iot-f797f.firebaseapp.com",
+    databaseURL: "https://solar-air-dryer-iot-f797f-default-rtdb.asia-southeast1.firebasedatabase.app/",
+    projectId: "solar-air-dryer-iot-f797f",
+  };
+
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+
+  /* ─── State ─────────────────────────────────── */
+  let allData = [];         // raw sorted records (newest first)
+  let filtered = [];        // after search/date filter
+  let currentPage = 1;
+  let rowsPerPage = 50;
+
+  /* ─── Helpers ───────────────────────────────── */
+  const fmtVal = (v) => {
+    if (v === null || v === undefined || v === "null" || v === "NULL") return null;
+    const n = parseFloat(v);
+    return isNaN(n) ? null : n.toFixed(1);
+  };
+
+  const cellT = (v) => {
+    const f = fmtVal(v);
+    return f !== null ? `<span class="v-t">${f}</span>` : `<span class="v-null">—</span>`;
+  };
+
+  const cellH = (v) => {
+    const f = fmtVal(v);
+    return f !== null ? `<span class="v-h">${f}</span>` : `<span class="v-null">—</span>`;
+  };
+
+  /* ─── Load Data ─────────────────────────────── */
+  function setConnState(state, msg) {
+    const badge = document.getElementById("conn-badge");
+    const txt   = document.getElementById("conn-text");
+    badge.className = state;
+    txt.textContent = msg;
+  }
+
+  function loadHistory() {
+    setConnState("loading", "Memuat...");
+    document.getElementById("btn-export").disabled = true;
+    if (document.getElementById("btn-reset")) document.getElementById("btn-reset").disabled = true;
+    document.getElementById("table-body").innerHTML = `
+      <tr class="state-row">
+        <td colspan="13">
+          <div class="spinner"></div>
+          <div class="state-msg">Mengambil data dari Firebase...</div>
+        </td>
+      </tr>`;
+
+    db.ref("/history").once("value")
+      .then(snap => {
+        if (!snap.exists()) {
+          allData = [];
+          setConnState("error", "Tidak ada data");
+          renderEmpty("Tidak ada data di /history");
+          return;
+        }
+
+        const raw = [];
+        snap.forEach(child => raw.push(child.val()));
+
+        // Sort newest first by timestamp
+        raw.sort((a, b) => (Number(b.timestamp) || 0) - (Number(a.timestamp) || 0));
+
+        allData = raw;
+        setConnState("online", `${raw.length} record`);
+        document.getElementById("btn-export").disabled = false;
+        if (document.getElementById("btn-reset")) document.getElementById("btn-reset").disabled = false;
+        applyFilter();
+      })
+      .catch(err => {
+        console.error("Firebase error:", err);
+        setConnState("error", "Gagal terhubung");
+        renderEmpty("Gagal memuat data: " + err.message);
+      });
+  }
+
+  /* ─── Filter ────────────────────────────────── */
+  function applyFilter() {
+    const q    = document.getElementById("search-input").value.trim().toLowerCase();
+    const date = document.getElementById("date-filter").value; // "YYYY-MM-DD" or ""
+
+    filtered = allData.filter(entry => {
+      // Search query matches tanggal or waktu
+      const matchQ = !q ||
+        (entry.tanggal && entry.tanggal.toLowerCase().includes(q)) ||
+        (entry.waktu   && entry.waktu.toLowerCase().includes(q));
+
+      // Date filter: entry.tanggal is like "18-04-2026" so we need to check
+      // Try to match in multiple formats
+      let matchDate = true;
+      if (date) {
+        // date = "2026-04-18"
+        const [yr, mo, dy] = date.split("-");
+        const iso = `${yr}-${mo}-${dy}`;     // 2026-04-18
+        const dmy = `${dy}-${mo}-${yr}`;     // 18-04-2026
+        const dmySlash = `${dy}/${mo}/${yr}`; // 18/04/2026
+        const tang = (entry.tanggal || "");
+        matchDate = tang === dmy || tang === dmySlash || tang === iso || tang.includes(iso);
+      }
+
+      return matchQ && matchDate;
+    });
+
+    currentPage = 1;
+    updateStats();
+    renderPage();
+  }
+
+  /* ─── Stats ─────────────────────────────────── */
+  function updateStats() {
+    document.getElementById("stat-total").textContent    = allData.length;
+    document.getElementById("stat-filtered").textContent = filtered.length;
+
+    if (allData.length > 0) {
+      // newest is index 0, oldest is last
+      const newest = allData[0];
+      const oldest = allData[allData.length - 1];
+      document.getElementById("stat-latest").textContent      = newest.waktu || "—";
+      document.getElementById("stat-latest-date").textContent = newest.tanggal || "";
+      document.getElementById("stat-oldest").textContent      = oldest.waktu || "—";
+      document.getElementById("stat-oldest-date").textContent = oldest.tanggal || "";
+
+      // Overall averages
+      let sumT = 0, cntT = 0, sumH = 0, cntH = 0;
+      allData.forEach(e => {
+        const t = parseFloat(e.avg_t); if (!isNaN(t)) { sumT += t; cntT++; }
+        const h = parseFloat(e.avg_h); if (!isNaN(h)) { sumH += h; cntH++; }
+      });
+      document.getElementById("stat-avg-t").textContent = cntT > 0 ? (sumT / cntT).toFixed(1) : "—";
+      document.getElementById("stat-avg-h").textContent = cntH > 0 ? (sumH / cntH).toFixed(1) : "—";
+    }
+  }
+
+  /* ─── Render ────────────────────────────────── */
+  function renderPage() {
+    const tbody = document.getElementById("table-body");
+
+    if (filtered.length === 0) {
+      renderEmpty("Tidak ada data yang cocok dengan filter.");
+      return;
+    }
+
+    const start = (currentPage - 1) * rowsPerPage;
+    const end   = Math.min(start + rowsPerPage, filtered.length);
+    const slice = filtered.slice(start, end);
+
+    const rows = slice.map((entry, idx) => {
+      // Build sensor map
+      const sMap = {};
+      if (Array.isArray(entry.sensor_data)) {
+        entry.sensor_data.forEach(s => { sMap[s.sensor] = s; });
+      }
+
+      // Alternating row shade
+      const bg = (start + idx) % 2 === 0 ? "" : "style='background:rgba(255,255,255,0.015)'";
+
+      const sensorCols = [1,2,3,4,5].map(id => {
+        const s = sMap[id];
+        const cL = "sep-left";
+        return `<td class="${cL}">${cellT(s?.t)}</td><td>${cellH(s?.h)}</td>`;
+      }).join("");
+
+      return `<tr ${bg}>
+        <td>
+          <div class="td-date">${entry.tanggal || "—"}</div>
+          <div class="td-time">${entry.waktu || "—"}</div>
+        </td>
+        <td>${cellT(entry.avg_t)}</td>
+        <td>${cellH(entry.avg_h)}</td>
+        ${sensorCols}
+      </tr>`;
+    });
+
+    tbody.innerHTML = rows.join("");
+    renderPagination(filtered.length, start, end);
+  }
+
+  function renderEmpty(msg) {
+    document.getElementById("table-body").innerHTML = `
+      <tr class="state-row">
+        <td colspan="13"><div class="state-msg">${msg}</div></td>
+      </tr>`;
+    document.getElementById("pag-info").innerHTML = "—";
+    document.getElementById("pag-btns").innerHTML = "";
+  }
+
+  /* ─── Pagination ────────────────────────────── */
+  function renderPagination(total, start, end) {
+    document.getElementById("pag-info").innerHTML =
+      `Menampilkan <b>${start + 1}</b>–<b>${end}</b> dari <b>${total}</b> record`;
+
+    const totalPages = Math.ceil(total / rowsPerPage);
+    const btns = document.getElementById("pag-btns");
+    btns.innerHTML = "";
+
+    if (totalPages <= 1) return;
+
+    // Prev
+    const prev = mkBtn("‹", currentPage === 1, () => { currentPage--; renderPage(); });
+    btns.appendChild(prev);
+
+    // Page numbers (show up to 7 with ellipsis)
+    const pages = calcPageNums(totalPages, currentPage);
+    pages.forEach(p => {
+      if (p === "...") {
+        const el = document.createElement("span");
+        el.textContent = "…";
+        el.style.cssText = "color:var(--c-muted);padding:0 4px;font-size:13px;";
+        btns.appendChild(el);
+      } else {
+        const b = mkBtn(p, false, () => { currentPage = p; renderPage(); });
+        if (p === currentPage) b.classList.add("active");
+        btns.appendChild(b);
+      }
+    });
+
+    // Next
+    const next = mkBtn("›", currentPage === totalPages, () => { currentPage++; renderPage(); });
+    btns.appendChild(next);
+  }
+
+  function mkBtn(label, disabled, onClick) {
+    const b = document.createElement("button");
+    b.className = "pg-btn";
+    b.textContent = label;
+    b.disabled = disabled;
+    b.addEventListener("click", onClick);
+    return b;
+  }
+
+  function calcPageNums(total, cur) {
+    if (total <= 7) return Array.from({length: total}, (_, i) => i + 1);
+    const pages = [];
+    if (cur <= 4) {
+      pages.push(1,2,3,4,5,"...",total);
+    } else if (cur >= total - 3) {
+      pages.push(1,"...",total-4,total-3,total-2,total-1,total);
+    } else {
+      pages.push(1,"...",cur-1,cur,cur+1,"...",total);
+    }
+    return pages;
+  }
+
+  /* ─── Export CSV ────────────────────────────── */
+  function exportCSV() {
+    if (allData.length === 0) return;
+
+    let csv = "Tanggal,Waktu,Avg T (°C),Avg H (%),S1-T,S1-H,S2-T,S2-H,S3-T,S3-H,S4-T,S4-H,S5-T,S5-H\n";
+
+    allData.forEach(entry => {
+      const sMap = {};
+      if (Array.isArray(entry.sensor_data)) {
+        entry.sensor_data.forEach(s => { sMap[s.sensor] = s; });
+      }
+
+      const row = [
+        entry.tanggal || "",
+        entry.waktu   || "",
+        fmtVal(entry.avg_t) ?? "",
+        fmtVal(entry.avg_h) ?? "",
+      ];
+
+      [1,2,3,4,5].forEach(id => {
+        const s = sMap[id];
+        row.push(fmtVal(s?.t) ?? "");
+        row.push(fmtVal(s?.h) ?? "");
+      });
+
+      csv += row.join(",") + "\n";
+    });
+
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" }); // BOM for Excel
+    const url  = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href  = url;
+    link.download = `history_sensor_${new Date().toISOString().split("T")[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
+  /* ─── Reset History ───────────────────────────── */
+  function resetHistory() {
+    const pwd = prompt("Masukkan password untuk mereset riwayat:");
+    if (pwd !== "12345678") {
+      if (pwd !== null) {
+        alert("Password salah! Reset dibatalkan.");
+      }
+      return;
+    }
+    if (confirm("Apakah Anda yakin ingin menghapus SEMUA data history sensor?\nData yang dihapus tidak dapat dikembalikan!")) {
+      db.ref("/history").remove()
+        .then(() => {
+          alert("Riwayat data berhasil dihapus!");
+          loadHistory(); // Reload to show empty state
+        })
+        .catch(err => {
+          console.error("Gagal menghapus riwayat:", err);
+          alert("Gagal menghapus riwayat: " + err.message);
+        });
+    }
+  }
+
+  /* ─── Event Listeners ───────────────────────── */
+  document.getElementById("search-input").addEventListener("input", applyFilter);
+  document.getElementById("date-filter").addEventListener("change", applyFilter);
+  document.getElementById("rpp-select").addEventListener("change", e => {
+    rowsPerPage = Number(e.target.value);
+    currentPage = 1;
+    renderPage();
+  });
+
+  /* ─── Boot ──────────────────────────────────── */
+  loadHistory();
+</script>
+</body>
+</html>

@@ -1,0 +1,956 @@
+<!DOCTYPE html><html><head><meta charset='utf-8'><title>Desain Sistem Solar Dryer IoT</title><style>
+@page { size: A4; margin: 1.5cm 2cm; }
+body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11pt; line-height: 1.6; color: #1a1a1a; max-width: 800px; margin: 0 auto; padding: 20px; }
+h1 { font-size: 22pt; color: #1e3a5f; border-bottom: 3px solid #e85d04; padding-bottom: 8px; margin-top: 20px; }
+h2 { font-size: 16pt; color: #2c5282; border-bottom: 1.5px solid #bee3f8; padding-bottom: 4px; margin-top: 24px; page-break-after: avoid; }
+h3 { font-size: 13pt; color: #2d3748; margin-top: 18px; page-break-after: avoid; }
+table { border-collapse: collapse; width: 100%; margin: 10px 0 16px 0; font-size: 10pt; page-break-inside: avoid; }
+th { background: #2c5282; color: white; padding: 8px 10px; text-align: left; font-weight: 600; }
+td { padding: 6px 10px; border: 1px solid #cbd5e0; }
+tr:nth-child(even) td { background: #f7fafc; }
+code { background: #edf2f7; padding: 2px 5px; border-radius: 3px; font-size: 9.5pt; font-family: 'Consolas', monospace; color: #d97706; }
+pre { background: #1a202c; color: #e2e8f0; padding: 12px 16px; border-radius: 6px; font-size: 9pt; overflow-x: auto; white-space: pre-wrap; page-break-inside: avoid; }
+pre code { background: transparent; color: inherit; padding: 0; }
+pre.mermaid { background: #f8fafc; color: #334155; border: 1px solid #e2e8f0; font-family: monospace; white-space: pre-wrap; }
+blockquote { border-left: 4px solid #e85d04; background: #fffaf0; padding: 10px 16px; margin: 12px 0; font-style: italic; }
+hr { border: none; border-top: 1px solid #e2e8f0; margin: 20px 0; }
+ul, ol { margin-top: 8px; margin-bottom: 16px; padding-left: 24px; }
+li { margin-bottom: 4px; }
+@media print {
+    body { padding: 0; max-width: none; }
+    pre { white-space: pre-wrap; word-wrap: break-word; }
+}
+</style></head><body><h1>Desain Sistem Aplikasi Solar Dryer IoT</h1>
+<h2>1. Gambaran Umum Sistem</h2>
+<p>Sistem <strong>Solar Dryer IoT</strong> adalah platform monitoring dan kontrol pengering surya berbasis Internet of Things (IoT). Sistem ini memungkinkan pengguna memantau suhu &amp; kelembaban dari <strong>10 sensor DHT22</strong> secara real-time, serta mengontrol kecepatan <strong>blower BTS7960</strong> melalui dashboard web maupun mobile.</p>
+<h3>Komponen Utama</h3>
+<table>
+<thead>
+<tr>
+<th>Komponen</th>
+<th>Teknologi</th>
+<th>Fungsi</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Firmware</strong></td>
+<td>ESP32 + Arduino C++</td>
+<td>Membaca sensor, kontrol blower, kirim data</td>
+</tr>
+<tr>
+<td><strong>Backend/Database</strong></td>
+<td>Firebase Realtime Database</td>
+<td>Penyimpanan &amp; sinkronisasi data real-time</td>
+</tr>
+<tr>
+<td><strong>Autentikasi</strong></td>
+<td>Firebase Authentication</td>
+<td>Login, session, RBAC</td>
+</tr>
+<tr>
+<td><strong>Web Dashboard</strong></td>
+<td>React 18 + Recharts</td>
+<td>Monitoring &amp; kontrol via browser</td>
+</tr>
+<tr>
+<td><strong>Mobile App (React)</strong></td>
+<td>React + Capacitor 8</td>
+<td>APK Android dari codebase React</td>
+</tr>
+<tr>
+<td><strong>Mobile App (Flutter)</strong></td>
+<td>Flutter + fl_chart</td>
+<td>Aplikasi mobile native Android</td>
+</tr>
+<tr>
+<td><strong>Hosting Web</strong></td>
+<td>Netlify</td>
+<td>Deploy dashboard web</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>2. Arsitektur Sistem (High-Level)</h2>
+<pre class="mermaid">
+graph TB
+    subgraph HARDWARE["⚡ Hardware Layer"]
+        DHT["10x DHT22<br/>Sensor Suhu & Kelembaban"]
+        ESP["ESP32 DevKit V1<br/>(Mikrokontroler)"]
+        BTS["BTS7960<br/>Motor Driver"]
+        BLOWER["Blower AC"]
+        RTC["RTC DS3231<br/>Real-Time Clock"]
+        SD["SD Card Module<br/>Data Logger"]
+    end
+
+    subgraph CLOUD["☁️ Cloud Layer (Firebase)"]
+        AUTH["Firebase Auth<br/>Email/Password"]
+        RTDB["Firebase RTDB<br/>asia-southeast1"]
+    end
+
+    subgraph CLIENT["📱 Client Layer"]
+        WEB["React Web Dashboard<br/>Netlify"]
+        APK_R["Android APK<br/>(React + Capacitor)"]
+        APK_F["Flutter Mobile App<br/>(Native Android)"]
+    end
+
+    DHT -->|"GPIO 32,33,25,27,26,<br/>14,17,13,16,4"| ESP
+    RTC -->|"I2C (SDA:21, SCL:22)"| ESP
+    SD -->|"SPI (CS:5, SCK:18,<br/>MISO:19, MOSI:23)"| ESP
+    ESP -->|"PWM GPIO 2<br/>Enable GPIO 15"| BTS
+    BTS --> BLOWER
+    ESP -->|"WiFi → HTTPS"| RTDB
+    ESP -->|"Auth Token"| AUTH
+    AUTH --> RTDB
+    RTDB <-->|"onValue listener"| WEB
+    RTDB <-->|"onValue listener"| APK_R
+    RTDB <-->|"onValue stream"| APK_F
+</pre>
+
+<hr />
+<h2>3. Arsitektur Hardware</h2>
+<h3>3.1 Wiring Diagram</h3>
+<table>
+<thead>
+<tr>
+<th>Komponen</th>
+<th>Pin Komponen</th>
+<th>Pin ESP32</th>
+<th>Protokol</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>DHT22 Sensor 1-10</td>
+<td>DATA</td>
+<td>GPIO 32, 33, 25, 27, 26, 14, 17, 13, 16, 4</td>
+<td>Digital</td>
+</tr>
+<tr>
+<td>BTS7960 RPWM</td>
+<td>RPWM</td>
+<td>GPIO 2</td>
+<td>PWM (5kHz, 8-bit)</td>
+</tr>
+<tr>
+<td>BTS7960 Enable</td>
+<td>R_EN &amp; L_EN</td>
+<td>GPIO 15</td>
+<td>Digital</td>
+</tr>
+<tr>
+<td>SD Card</td>
+<td>CS</td>
+<td>GPIO 5</td>
+<td>SPI</td>
+</tr>
+<tr>
+<td>SD Card</td>
+<td>SCK</td>
+<td>GPIO 18</td>
+<td>SPI</td>
+</tr>
+<tr>
+<td>SD Card</td>
+<td>MISO</td>
+<td>GPIO 19</td>
+<td>SPI</td>
+</tr>
+<tr>
+<td>SD Card</td>
+<td>MOSI</td>
+<td>GPIO 23</td>
+<td>SPI</td>
+</tr>
+<tr>
+<td>RTC DS3231</td>
+<td>SDA</td>
+<td>GPIO 21</td>
+<td>I2C</td>
+</tr>
+<tr>
+<td>RTC DS3231</td>
+<td>SCL</td>
+<td>GPIO 22</td>
+<td>I2C</td>
+</tr>
+</tbody>
+</table>
+<h3>3.2 Kontrol Blower (BTS7960 PWM)</h3>
+<pre><code>Kecepatan (0-100%) → map ke PWM (0-255)
+├── speed &gt; 0  → Enable HIGH + ledcWrite(pwmValue)
+└── speed == 0 → ledcWrite(0) + Enable LOW (hemat daya)
+
+PWM Config: 5kHz, 8-bit resolution, LEDC channel 0
+</code></pre>
+<hr />
+<h2>4. Firmware ESP32 — Alur Kerja</h2>
+<h3>4.1 Sequence Diagram</h3>
+<pre class="mermaid">
+sequenceDiagram
+    participant S as 10x DHT22
+    participant E as ESP32
+    participant SD as SD Card
+    participant RTC as RTC DS3231
+    participant FB as Firebase RTDB
+    participant D as Dashboard
+
+    Note over E: SETUP (Boot)
+    E->>S: Init 10 sensor DHT22
+    E->>RTC: Init RTC DS3231 (I2C)
+    E->>SD: Init SD Card (SPI)
+    E->>FB: WiFi Connect → Firebase Auth
+    E->>FB: Set initial blower speed = 0
+    E->>FB: Set control_mode = "manual"
+    E->>FB: beginStream("/blowers")
+
+    loop Setiap 60 detik
+        E->>RTC: Baca timestamp
+        E->>S: Baca 10 sensor (suhu + kelembaban)
+        E->>E: Hitung rata-rata (avg_t, avg_h)
+        E->>FB: SET /sensor_data (JSON detail)
+        E->>SD: Append ke /data.csv
+        E->>FB: PUSH ke /history (dengan server timestamp)
+    end
+
+    D->>FB: User ubah speed blower
+    FB-->>E: Stream callback /blowers/blower1/speed
+    E->>E: setBlowerSpeed() → PWM output
+</pre>
+
+<h3>4.2 Interval &amp; Timing</h3>
+<table>
+<thead>
+<tr>
+<th>Aksi</th>
+<th>Interval</th>
+<th>Keterangan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Baca Sensor</td>
+<td>60.000 ms (1 menit)</td>
+<td>Baca 10 sensor + kirim ke Firebase</td>
+</tr>
+<tr>
+<td>Push History</td>
+<td>60.000 ms (1 menit)</td>
+<td>Simpan ke node <code>/history</code></td>
+</tr>
+<tr>
+<td>Log SD Card</td>
+<td>Setiap menit unik</td>
+<td>Cek <code>lastLoggedMinute</code> berbeda</td>
+</tr>
+<tr>
+<td>WiFi Reconnect</td>
+<td>15.000 ms</td>
+<td>Auto-check jika WiFi terputus</td>
+</tr>
+</tbody>
+</table>
+<h3>4.3 Struktur Data yang Dikirim ke Firebase</h3>
+<pre><code class="language-json">{
+  &quot;sensor_data&quot;: {
+    &quot;avg_t&quot;: 32.5,
+    &quot;avg_h&quot;: 61.2,
+    &quot;tanggal&quot;: &quot;2026-06-22&quot;,
+    &quot;waktu&quot;: &quot;12:15:30&quot;,
+    &quot;sensor_data&quot;: [
+      { &quot;sensor&quot;: 1, &quot;t&quot;: 33.1, &quot;h&quot;: 58.4 },
+      { &quot;sensor&quot;: 2, &quot;t&quot;: &quot;null&quot;, &quot;h&quot;: &quot;null&quot; },
+      ...
+      { &quot;sensor&quot;: 10, &quot;t&quot;: 31.8, &quot;h&quot;: 63.0 }
+    ]
+  }
+}
+</code></pre>
+<h3>4.4 Format Log SD Card (CSV)</h3>
+<pre><code>Tanggal,Waktu,T1,H1,T2,H2,...,T10,H10
+2026-06-22,12:15:30,33.1,58.4,NAN,NAN,...,31.8,63.0
+</code></pre>
+<hr />
+<h2>5. Firebase — Struktur Database</h2>
+<h3>5.1 Schema Lengkap</h3>
+<pre class="mermaid">
+graph LR
+    ROOT["🔥 Firebase RTDB Root"]
+
+    ROOT --> SD["/sensor_data"]
+    ROOT --> BL["/blowers"]
+    ROOT --> CM["/control_mode"]
+    ROOT --> HI["/history"]
+    ROOT --> US["/users"]
+    ROOT --> UA["/user_akses"]
+    ROOT --> PR["/presence"]
+
+    SD --> SD1["avg_t, avg_h, tanggal,<br/>waktu, sensor_data[]"]
+    BL --> BL1["/blower1 {name, speed}"]
+    CM --> CM1["'manual' | 'auto'"]
+    HI --> HI1["/-NxABC {avg_t, avg_h,<br/>sensor_data[], timestamp}"]
+    US --> US1["/{uid} {email,<br/>displayName, lastLogin}"]
+    UA --> UA1["/{uid} {role, updatedAt}"]
+    PR --> PR1["/{uid} {email,<br/>displayName, lastSeen}"]
+</pre>
+
+<h3>5.2 Node Detail</h3>
+<table>
+<thead>
+<tr>
+<th>Node</th>
+<th>Tipe</th>
+<th>Ditulis oleh</th>
+<th>Dibaca oleh</th>
+<th>Keterangan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/sensor_data</code></td>
+<td>Object</td>
+<td>ESP32</td>
+<td>Dashboard</td>
+<td>Data real-time terbaru</td>
+</tr>
+<tr>
+<td><code>/blowers/blower1</code></td>
+<td>Object</td>
+<td>Dashboard</td>
+<td>ESP32 (stream)</td>
+<td><code>{name, speed: 0-100}</code></td>
+</tr>
+<tr>
+<td><code>/control_mode</code></td>
+<td>String</td>
+<td>Dashboard</td>
+<td>Dashboard</td>
+<td><code>"manual"</code> atau <code>"auto"</code></td>
+</tr>
+<tr>
+<td><code>/history/{pushId}</code></td>
+<td>Object</td>
+<td>ESP32</td>
+<td>Dashboard</td>
+<td>Data historis + server timestamp</td>
+</tr>
+<tr>
+<td><code>/users/{uid}</code></td>
+<td>Object</td>
+<td>Dashboard (login)</td>
+<td>Admin</td>
+<td>Profil user</td>
+</tr>
+<tr>
+<td><code>/user_akses/{uid}</code></td>
+<td>Object</td>
+<td>Admin / self (pertama kali)</td>
+<td>Admin / self</td>
+<td>Role assignment</td>
+</tr>
+<tr>
+<td><code>/presence/{uid}</code></td>
+<td>Object</td>
+<td>Dashboard (auto)</td>
+<td>Admin</td>
+<td>Online/offline tracking</td>
+</tr>
+</tbody>
+</table>
+<h3>5.3 Security Rules</h3>
+<pre><code class="language-json">{
+  &quot;sensor_data&quot;:  { &quot;read&quot;: true, &quot;write&quot;: true },
+  &quot;blowers&quot;:      { &quot;read&quot;: true, &quot;write&quot;: true },
+  &quot;control_mode&quot;: { &quot;read&quot;: true, &quot;write&quot;: true },
+  &quot;history&quot;:      { &quot;read&quot;: true, &quot;write&quot;: true },
+  &quot;users&quot;: {
+    &quot;read&quot;:  &quot;auth != null &amp;&amp; role === 'admin'&quot;,
+    &quot;$uid&quot;: { &quot;read/write&quot;: &quot;auth.uid === $uid&quot; }
+  },
+  &quot;user_akses&quot;: {
+    &quot;read&quot;:  &quot;auth != null &amp;&amp; role === 'admin'&quot;,
+    &quot;$uid&quot;: { &quot;write&quot;: &quot;admin ATAU belum ada data (self-init)&quot; }
+  }
+}
+</code></pre>
+<hr />
+<h2>6. React Web Dashboard — Arsitektur Frontend</h2>
+<h3>6.1 Component Tree</h3>
+<pre class="mermaid">
+graph TD
+    IDX["index.js<br/>(Entry Point)"]
+    AP["AuthProvider<br/>(Context)"]
+    APP["App.jsx<br/>(Main Router)"]
+
+    IDX --> AP --> APP
+
+    APP --> LP["LoginPage"]
+    APP --> HD["Header<br/>(Brand + Status + Logout)"]
+    APP --> NAV["Tab Navigation"]
+    APP --> TAB1["Tab: Dashboard"]
+    APP --> TAB2["Tab: Control"]
+    APP --> TAB3["Tab: Data"]
+    APP --> TAB4["Tab: Management"]
+
+    TAB1 --> RT["Real-Time Info Bar"]
+    TAB1 --> SC["SensorCard ×2<br/>(Avg Temp + Humidity)"]
+    TAB1 --> ISC["IndividualSensorCard ×10"]
+    TAB1 --> CH["SensorChart<br/>(Recharts LineChart)"]
+
+    TAB2 --> SS["Status Summary"]
+    TAB2 --> FG["Fan Status Grid"]
+    TAB2 --> CP["Control Panel<br/>(Auto/Manual Mode)"]
+    CP --> BC["BlowerControl<br/>(PWM Slider)"]
+
+    TAB3 --> DT["Data Table<br/>(Paginated, Searchable)"]
+    TAB3 --> EX["Export CSV"]
+
+    TAB4 --> MP["ManagementPage<br/>(User RBAC Table)"]
+</pre>
+
+<h3>6.2 File &amp; Tanggung Jawab</h3>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Ukuran</th>
+<th>Fungsi</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="file:///c:/Users/Abel%20Rizky/OneDrive/Documents/Tugas%20Akhir/aplikasi/smart-ac-dashboard/react-dashboard/src/index.js">index.js</a></td>
+<td>343 B</td>
+<td>Entry point, mount <code>AuthProvider</code> + <code>App</code></td>
+</tr>
+<tr>
+<td><a href="file:///c:/Users/Abel%20Rizky/OneDrive/Documents/Tugas%20Akhir/aplikasi/smart-ac-dashboard/react-dashboard/src/firebase.js">firebase.js</a></td>
+<td>937 B</td>
+<td>Inisialisasi Firebase App, export <code>database</code> &amp; <code>auth</code></td>
+</tr>
+<tr>
+<td><a href="file:///c:/Users/Abel%20Rizky/OneDrive/Documents/Tugas%20Akhir/aplikasi/smart-ac-dashboard/react-dashboard/src/contexts/AuthContext.jsx">AuthContext.jsx</a></td>
+<td>5.9 KB</td>
+<td>Auth state, RBAC, session timer (1 jam), presence</td>
+</tr>
+<tr>
+<td><a href="file:///c:/Users/Abel%20Rizky/OneDrive/Documents/Tugas%20Akhir/aplikasi/smart-ac-dashboard/react-dashboard/src/App.jsx">App.jsx</a></td>
+<td>21.6 KB</td>
+<td>Komponen utama: 4 tab, Firebase listeners, export CSV</td>
+</tr>
+<tr>
+<td><a href="file:///c:/Users/Abel%20Rizky/OneDrive/Documents/Tugas%20Akhir/aplikasi/smart-ac-dashboard/react-dashboard/src/components/SensorCard.jsx">SensorCard.jsx</a></td>
+<td>2.8 KB</td>
+<td>Kartu rata-rata + kartu individual per sensor</td>
+</tr>
+<tr>
+<td><a href="file:///c:/Users/Abel%20Rizky/OneDrive/Documents/Tugas%20Akhir/aplikasi/smart-ac-dashboard/react-dashboard/src/components/BlowerControl.jsx">BlowerControl.jsx</a></td>
+<td>2.5 KB</td>
+<td>Slider PWM 0-100%, estimasi RPM (max 6000)</td>
+</tr>
+<tr>
+<td><a href="file:///c:/Users/Abel%20Rizky/OneDrive/Documents/Tugas%20Akhir/aplikasi/smart-ac-dashboard/react-dashboard/src/components/SensorChart.jsx">SensorChart.jsx</a></td>
+<td>2.8 KB</td>
+<td>Grafik line chart (Recharts) avg suhu &amp; kelembaban</td>
+</tr>
+<tr>
+<td><a href="file:///c:/Users/Abel%20Rizky/OneDrive/Documents/Tugas%20Akhir/aplikasi/smart-ac-dashboard/react-dashboard/src/components/LoginPage.jsx">LoginPage.jsx</a></td>
+<td>3.8 KB</td>
+<td>Halaman login dengan error handling</td>
+</tr>
+<tr>
+<td><a href="file:///c:/Users/Abel%20Rizky/OneDrive/Documents/Tugas%20Akhir/aplikasi/smart-ac-dashboard/react-dashboard/src/components/ManagementPage.jsx">ManagementPage.jsx</a></td>
+<td>8.7 KB</td>
+<td>Manajemen user: ubah role, hapus akses, lihat online</td>
+</tr>
+<tr>
+<td><a href="file:///c:/Users/Abel%20Rizky/OneDrive/Documents/Tugas%20Akhir/aplikasi/smart-ac-dashboard/react-dashboard/src/parseCsv.js">parseCsv.js</a></td>
+<td>1.9 KB</td>
+<td>Parser CSV dummy untuk mode development</td>
+</tr>
+</tbody>
+</table>
+<h3>6.3 Sistem RBAC (Role-Based Access Control)</h3>
+<pre class="mermaid">
+graph LR
+    subgraph ROLES["🔐 5 Level Role"]
+        R0["guess<br/>Level 0"]
+        R1["view_data<br/>Level 1"]
+        R2["eksekusi_data<br/>Level 2"]
+        R3["report_data<br/>Level 3"]
+        R4["admin<br/>Level 4"]
+    end
+
+    subgraph TABS["📋 Tab Akses"]
+        T1["Dashboard ✅"]
+        T2["Control ⚙️"]
+        T3["Data 📊"]
+        T4["Management 👥"]
+        T5["Export 📤"]
+    end
+
+    R0 --> T1
+    R1 --> T1
+    R1 --> T3
+    R2 --> T1
+    R2 --> T2
+    R2 --> T3
+    R3 --> T1
+    R3 --> T3
+    R3 --> T5
+    R4 --> T1
+    R4 --> T2
+    R4 --> T3
+    R4 --> T4
+    R4 --> T5
+</pre>
+
+<table>
+<thead>
+<tr>
+<th>Role</th>
+<th>Level</th>
+<th>Akses Tab</th>
+<th>Export?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>guess</code></td>
+<td>0</td>
+<td>Dashboard</td>
+<td>❌</td>
+</tr>
+<tr>
+<td><code>view_data</code></td>
+<td>1</td>
+<td>Dashboard, Data</td>
+<td>❌</td>
+</tr>
+<tr>
+<td><code>eksekusi_data</code></td>
+<td>2</td>
+<td>Dashboard, Control, Data</td>
+<td>❌</td>
+</tr>
+<tr>
+<td><code>report_data</code></td>
+<td>3</td>
+<td>Dashboard, Data</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>admin</code></td>
+<td>4</td>
+<td>Dashboard, Control, Data, Management</td>
+<td>✅</td>
+</tr>
+</tbody>
+</table>
+<h3>6.4 Session Management</h3>
+<ul>
+<li><strong>Durasi</strong>: 1 jam (3.600.000 ms)</li>
+<li><strong>Mekanisme</strong>: Timestamp disimpan di <code>localStorage</code> → timer <code>setTimeout</code> otomatis logout</li>
+<li><strong>Presence</strong>: <code>/presence/{uid}</code> di-set saat login, <code>onDisconnect().remove()</code> otomatis saat offline</li>
+</ul>
+<h3>6.5 Data Flow — Real-Time Listeners</h3>
+<pre class="mermaid">
+sequenceDiagram
+    participant FB as Firebase RTDB
+    participant APP as App.jsx
+    participant UI as UI Components
+
+    APP->>FB: onValue("/sensor_data")
+    FB-->>APP: {avg_t, avg_h, sensor_data[], waktu, tanggal}
+    APP->>UI: setSensorData() → SensorCard, IndividualSensorCard
+
+    APP->>FB: onValue("/blowers")
+    FB-->>APP: {blower1: {name, speed}, blower2: {...}}
+    APP->>UI: setBlowers() → BlowerControl, Fan Status
+
+    APP->>FB: onValue("/history")
+    FB-->>APP: [{avg_t, avg_h, sensor_data[], timestamp}, ...]
+    APP->>UI: setHistory() → SensorChart, Data Table
+
+    APP->>FB: onValue("/control_mode")
+    FB-->>APP: "manual" | "auto"
+    APP->>UI: setControlMode() → Mode Switch
+</pre>
+
+<h3>6.6 Fitur Export CSV</h3>
+<ul>
+<li>Format: <code>history_sensor_YYYY-MM-DD.csv</code></li>
+<li>Kolom: <code>Tanggal, Waktu, Avg T, Avg H, S1-T, S1-H, ..., S10-T, S10-H</code></li>
+<li><strong>Web</strong>: Blob download via <code>&lt;a&gt;</code> tag</li>
+<li><strong>Android (Capacitor)</strong>: <code>Filesystem.writeFile()</code> → <code>Share.share()</code> (native share dialog)</li>
+</ul>
+<hr />
+<h2>7. Flutter Mobile App — Arsitektur</h2>
+<h3>7.1 Struktur File</h3>
+<pre><code>flutter_dashboard/lib/
+├── main.dart                          # Entry point, MaterialApp (Dark Theme)
+├── screens/
+│   └── dashboard_screen.dart          # Layar utama (StatefulWidget)
+├── widgets/
+│   ├── sensor_card.dart               # Kartu suhu/kelembaban + status
+│   ├── blower_control.dart            # Slider PWM + RPM display
+│   └── chart_widget.dart              # Line chart (fl_chart)
+└── services/
+    └── firebase_service.dart          # Abstraksi Firebase RTDB streams
+</code></pre>
+<h3>7.2 Perbedaan Flutter vs React Dashboard</h3>
+<table>
+<thead>
+<tr>
+<th>Aspek</th>
+<th>React Dashboard</th>
+<th>Flutter Dashboard</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Multi-sensor</strong></td>
+<td>✅ 10 sensor individual</td>
+<td>❌ Hanya avg (temperature/humidity)</td>
+</tr>
+<tr>
+<td><strong>Autentikasi</strong></td>
+<td>✅ Firebase Auth + RBAC</td>
+<td>❌ Tidak ada login</td>
+</tr>
+<tr>
+<td><strong>Tab Navigation</strong></td>
+<td>✅ 4 tab (Dashboard, Control, Data, Management)</td>
+<td>❌ Single page</td>
+</tr>
+<tr>
+<td><strong>Data Table</strong></td>
+<td>✅ Paginated + search + export</td>
+<td>❌ Tidak ada</td>
+</tr>
+<tr>
+<td><strong>Theme</strong></td>
+<td>Light mode</td>
+<td>Dark mode (Material 3)</td>
+</tr>
+<tr>
+<td><strong>Charting</strong></td>
+<td>Recharts (LineChart)</td>
+<td>fl_chart (LineChart)</td>
+</tr>
+<tr>
+<td><strong>Max RPM Display</strong></td>
+<td>6000</td>
+<td>2480</td>
+</tr>
+<tr>
+<td><strong>Presence/Session</strong></td>
+<td>✅</td>
+<td>❌</td>
+</tr>
+</tbody>
+</table>
+<h3>7.3 Dependencies</h3>
+<table>
+<thead>
+<tr>
+<th>Package</th>
+<th>Versi</th>
+<th>Fungsi</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>firebase_core</code></td>
+<td>^3.8.1</td>
+<td>Inisialisasi Firebase</td>
+</tr>
+<tr>
+<td><code>firebase_database</code></td>
+<td>^11.2.1</td>
+<td>Realtime Database streams</td>
+</tr>
+<tr>
+<td><code>fl_chart</code></td>
+<td>^0.69.2</td>
+<td>Grafik line chart</td>
+</tr>
+<tr>
+<td><code>google_fonts</code></td>
+<td>^6.2.1</td>
+<td>Font Inter</td>
+</tr>
+<tr>
+<td><code>fluttertoast</code></td>
+<td>^8.2.8</td>
+<td>Notifikasi toast</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>8. Capacitor — React → Android APK</h2>
+<h3>8.1 Konfigurasi</h3>
+<pre><code class="language-typescript">// capacitor.config.ts
+{
+  appId: 'com.solardryer.iot',
+  appName: 'Solar Dryer IoT',
+  webDir: 'build',              // Output dari react-scripts build
+  server: {
+    url: 'https://solardryeriot.netlify.app',  // Load dari Netlify
+    androidScheme: 'https'
+  }
+}
+</code></pre>
+<h3>8.2 Plugin Capacitor yang Digunakan</h3>
+<table>
+<thead>
+<tr>
+<th>Plugin</th>
+<th>Versi</th>
+<th>Fungsi</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>@capacitor/core</code></td>
+<td>^8.2.0</td>
+<td>Core runtime</td>
+</tr>
+<tr>
+<td><code>@capacitor/filesystem</code></td>
+<td>^8.1.2</td>
+<td>Tulis file CSV ke cache</td>
+</tr>
+<tr>
+<td><code>@capacitor/share</code></td>
+<td>^8.0.1</td>
+<td>Native share dialog untuk export</td>
+</tr>
+<tr>
+<td><code>@capacitor/android</code></td>
+<td>^8.2.0</td>
+<td>Android platform</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>9. Deployment &amp; Distribusi</h2>
+<h3>9.1 Platform Deployment</h3>
+<pre class="mermaid">
+graph LR
+    SRC["React Source Code"]
+    BUILD["npm run build"]
+    NET["Netlify<br/>solardryeriot.netlify.app"]
+    CAP["Capacitor Sync"]
+    GRADLE["Gradle Build"]
+    APK_R["APK (React)"]
+    FLUTTER["Flutter Build"]
+    APK_F["APK (Flutter)"]
+
+    SRC --> BUILD --> NET
+    BUILD --> CAP --> GRADLE --> APK_R
+    SRC --> FLUTTER --> APK_F
+</pre>
+
+<h3>9.2 APK yang Dihasilkan</h3>
+<table>
+<thead>
+<tr>
+<th>File APK</th>
+<th>Ukuran</th>
+<th>Keterangan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>SolarDryerIoT-Auth-RBAC.apk</code></td>
+<td>9.5 MB</td>
+<td>Versi terbaru dengan autentikasi + RBAC</td>
+</tr>
+<tr>
+<td><code>SolarDryerIoT-LiveUpdate.apk</code></td>
+<td>11.5 MB</td>
+<td>Versi live update dari Netlify</td>
+</tr>
+<tr>
+<td><code>SolarDryerIoT_Flutter_PWM.apk</code></td>
+<td>45 MB</td>
+<td>Versi Flutter dengan kontrol PWM</td>
+</tr>
+<tr>
+<td><code>SolarDryerIoT_React_PWM.apk</code></td>
+<td>4.9 MB</td>
+<td>Versi React ringan dengan PWM</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>10. Alur Data End-to-End</h2>
+<pre class="mermaid">
+sequenceDiagram
+    participant S as 10x DHT22
+    participant E as ESP32
+    participant SD as SD Card
+    participant FB as Firebase
+    participant W as Web Dashboard
+    participant M as Mobile App
+    participant U as User
+
+    Note over S,U: === ALUR MONITORING (Setiap 1 Menit) ===
+    S->>E: Baca suhu & kelembaban (10 sensor)
+    E->>E: Hitung rata-rata, filter NaN
+    E->>FB: SET /sensor_data (JSON detail)
+    E->>FB: PUSH /history (+ server timestamp)
+    E->>SD: Append CSV row
+
+    FB-->>W: onValue → update real-time
+    FB-->>M: Stream → update real-time
+    W->>U: Tampilkan dashboard
+    M->>U: Tampilkan dashboard
+
+    Note over S,U: === ALUR KONTROL BLOWER ===
+    U->>W: Geser slider kecepatan (0-100%)
+    W->>FB: SET /blowers/blower1/speed = 75
+    FB-->>E: Stream callback → fanStreamCallback()
+    E->>E: setBlowerSpeed(0, 75)
+    E->>E: PWM = map(75, 0, 100, 0, 255) = 191
+    E->>E: Enable HIGH + ledcWrite(191)
+
+    Note over S,U: === ALUR LOGIN & RBAC ===
+    U->>W: Masukkan email + password
+    W->>FB: signInWithEmailAndPassword()
+    FB-->>W: Auth token
+    W->>FB: SET /users/{uid} (profil)
+    W->>FB: GET /user_akses/{uid} (role)
+    W->>W: Filter tab berdasarkan role
+    W->>FB: SET /presence/{uid} (online)
+</pre>
+
+<hr />
+<h2>11. Konektivitas &amp; Error Handling</h2>
+<h3>11.1 Deteksi Online/Offline</h3>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Mekanisme</th>
+<th>Timeout</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ESP32 → WiFi</td>
+<td><code>WiFi.status()</code> check setiap 15 detik</td>
+<td>Auto reconnect</td>
+</tr>
+<tr>
+<td>ESP32 → Firebase</td>
+<td><code>Firebase.ready()</code> check sebelum write</td>
+<td>Token auto-refresh</td>
+</tr>
+<tr>
+<td>Dashboard</td>
+<td>Bandingkan <code>lastUpdatedAt</code> vs <code>Date.now()</code></td>
+<td>120 detik (2 menit)</td>
+</tr>
+</tbody>
+</table>
+<h3>11.2 Error Handling pada ESP32</h3>
+<ul>
+<li>Sensor gagal → tampilkan "GAGAL" di Serial, kirim <code>"null"</code> ke Firebase</li>
+<li>SD Card gagal → lanjut tanpa logging lokal (<code>sdReady = false</code>)</li>
+<li>WiFi gagal → retry otomatis di background</li>
+<li>Firebase timeout → retry pada iterasi loop berikutnya</li>
+</ul>
+<hr />
+<h2>12. Teknologi &amp; Library</h2>
+<h3>12.1 React Dashboard</h3>
+<table>
+<thead>
+<tr>
+<th>Library</th>
+<th>Versi</th>
+<th>Fungsi</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>React</td>
+<td>18.3.1</td>
+<td>UI framework</td>
+</tr>
+<tr>
+<td>Firebase SDK</td>
+<td>10.14.1</td>
+<td>Auth + Realtime Database</td>
+</tr>
+<tr>
+<td>Recharts</td>
+<td>2.13.3</td>
+<td>Line chart visualization</td>
+</tr>
+<tr>
+<td>react-icons</td>
+<td>5.3.0</td>
+<td>Icon set (Ionicons, Weather, FontAwesome)</td>
+</tr>
+<tr>
+<td>react-hot-toast</td>
+<td>2.4.1</td>
+<td>Toast notifications</td>
+</tr>
+<tr>
+<td>react-scripts</td>
+<td>5.0.1</td>
+<td>Build toolchain (CRA)</td>
+</tr>
+</tbody>
+</table>
+<h3>12.2 ESP32 Firmware</h3>
+<table>
+<thead>
+<tr>
+<th>Library</th>
+<th>Fungsi</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Firebase_ESP_Client (Mobizt)</td>
+<td>Firebase Auth + RTDB</td>
+</tr>
+<tr>
+<td>DHT (Adafruit)</td>
+<td>Baca sensor DHT22</td>
+</tr>
+<tr>
+<td>RTClib</td>
+<td>RTC DS3231 (I2C)</td>
+</tr>
+<tr>
+<td>SD + SPI</td>
+<td>Data logging ke SD Card</td>
+</tr>
+<tr>
+<td>WiFi</td>
+<td>Koneksi jaringan</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>13. Ringkasan Desain</h2>
+<p>Sistem Solar Dryer IoT merupakan arsitektur <strong>3-tier</strong> yang terdiri dari:</p>
+<ol>
+<li>
+<p><strong>Hardware Tier</strong> — ESP32 sebagai edge computing device yang membaca 10 sensor, mengontrol blower via PWM, menyimpan log ke SD card, dan berkomunikasi dua arah dengan Firebase.</p>
+</li>
+<li>
+<p><strong>Cloud Tier</strong> — Firebase sebagai backbone yang menyediakan real-time database (sinkronisasi data sensor + perintah kontrol), autentikasi (email/password), dan otorisasi (RBAC 5 level).</p>
+</li>
+<li>
+<p><strong>Client Tier</strong> — Dashboard multi-platform (React Web + Capacitor Android + Flutter Android) yang menyajikan monitoring real-time, kontrol blower, visualisasi grafik, tabel data historis dengan export CSV, dan manajemen user.</p>
+</li>
+</ol>
+<blockquote>
+<p>Seluruh komunikasi bersifat <strong>event-driven</strong> — ESP32 menggunakan Firebase stream listener untuk menerima perintah kontrol secara instan, sementara dashboard menggunakan <code>onValue</code> listener untuk menerima update data sensor secara real-time tanpa polling.</p>
+</blockquote></body></html>

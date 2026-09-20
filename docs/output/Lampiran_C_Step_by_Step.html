@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Lampiran C Step by Step</title>
+  
+<style>
+  body { font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #333; max-width: 900px; margin: 0 auto; padding: 2rem; }
+  h1, h2, h3 { color: #1e3a8a; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.5rem; margin-top: 2rem; }
+  pre { background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 8px; overflow-x: auto; font-size: 13px; font-family: Consolas, Monaco, "Andale Mono", "Ubuntu Mono", monospace; }
+  code { font-family: Consolas, Monaco, "Andale Mono", monospace; background: #f3f4f6; padding: 0.2rem 0.4rem; border-radius: 4px; color: #be185d; font-size: 0.9em; }
+  pre code { background: none; padding: 0; color: inherit; }
+  table { width: 100%; border-collapse: collapse; margin-top: 1rem; margin-bottom: 1rem; }
+  th, td { border: 1px solid #d1d5db; padding: 0.75rem; text-align: left; }
+  th { background-color: #f3f4f6; font-weight: 600; }
+  tr:nth-child(even) { background-color: #f9fafb; }
+  .hljs-keyword { color: #569cd6; font-weight: bold; }
+  .hljs-string { color: #ce9178; }
+  .hljs-number { color: #b5cea8; }
+  .hljs-built_in { color: #4ec9b0; }
+  .hljs-comment { color: #6a9955; font-style: italic; }
+  .hljs-title { color: #dcdcaa; }
+</style>
+
+</head>
+<body>
+  <h1>LAMPIRAN C - LANGKAH-LANGKAH PEMBUATAN SISTEM</h1>
+<h2>Panduan Step-by-Step Pembuatan Sistem Solar Dryer IoT dari Awal hingga Akhir</h2>
+<hr>
+<h2>TAHAP 1: PERSIAPAN HARDWARE</h2>
+<h3>1.1 Komponen yang Dibutuhkan</h3>
+<table>
+<thead>
+<tr>
+<th>No</th>
+<th>Komponen</th>
+<th>Jumlah</th>
+<th>Keterangan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>ESP32 DevKit V1</td>
+<td>1</td>
+<td>Mikrokontroler utama</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Sensor DHT22</td>
+<td>10</td>
+<td>Sensor suhu &amp; kelembaban</td>
+</tr>
+<tr>
+<td>3</td>
+<td>BTS7960 Motor Driver</td>
+<td>1</td>
+<td>Driver blower PWM</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Blower/Kipas DC</td>
+<td>1</td>
+<td>Aktuator pengeringan</td>
+</tr>
+<tr>
+<td>5</td>
+<td>RTC DS3231</td>
+<td>1</td>
+<td>Modul jam real-time</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Micro SD Card Module</td>
+<td>1</td>
+<td>Logging data offline</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Micro SD Card</td>
+<td>1</td>
+<td>Media penyimpanan</td>
+</tr>
+<tr>
+<td>8</td>
+<td>Resistor 4.7kΩ</td>
+<td>10</td>
+<td>Pull-up untuk DHT22</td>
+</tr>
+<tr>
+<td>9</td>
+<td>Breadboard &amp; Kabel</td>
+<td>Secukupnya</td>
+<td>Koneksi komponen</td>
+</tr>
+</tbody>
+</table>
+<h3>1.2 Wiring / Rangkaian</h3>
+<table>
+<thead>
+<tr>
+<th>Komponen</th>
+<th>Pin ESP32</th>
+<th>Keterangan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>DHT22 Sensor 1-10</td>
+<td>GPIO 32, 33, 25, 27, 26, 14, 17, 13, 16, 4</td>
+<td>Data pin masing-masing sensor</td>
+</tr>
+<tr>
+<td>BTS7960 RPWM</td>
+<td>GPIO 2</td>
+<td>Sinyal PWM kecepatan</td>
+</tr>
+<tr>
+<td>BTS7960 R_EN &amp; L_EN</td>
+<td>GPIO 15</td>
+<td>Enable driver motor</td>
+</tr>
+<tr>
+<td>BTS7960 LPWM</td>
+<td>GND</td>
+<td>Ground</td>
+</tr>
+<tr>
+<td>SD Card CS</td>
+<td>GPIO 5</td>
+<td>SPI Chip Select</td>
+</tr>
+<tr>
+<td>SD Card SCK</td>
+<td>GPIO 18</td>
+<td>SPI Clock</td>
+</tr>
+<tr>
+<td>SD Card MISO</td>
+<td>GPIO 19</td>
+<td>SPI Data Out</td>
+</tr>
+<tr>
+<td>SD Card MOSI</td>
+<td>GPIO 23</td>
+<td>SPI Data In</td>
+</tr>
+<tr>
+<td>RTC DS3231 SDA</td>
+<td>GPIO 21</td>
+<td>I2C Data</td>
+</tr>
+<tr>
+<td>RTC DS3231 SCL</td>
+<td>GPIO 22</td>
+<td>I2C Clock</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>TAHAP 2: SETUP FIREBASE</h2>
+<h3>2.1 Membuat Project Firebase</h3>
+<ol>
+<li>Buka <a href="https://console.firebase.google.com/">https://console.firebase.google.com/</a></li>
+<li>Klik “Add Project” → beri nama “solar-air-dryer-iot”</li>
+<li>Nonaktifkan Google Analytics (opsional) → klik “Create Project”</li>
+</ol>
+<h3>2.2 Mengaktifkan Firebase Authentication</h3>
+<ol>
+<li>Di console Firebase, buka menu <strong>Authentication</strong></li>
+<li>Klik tab <strong>Sign-in method</strong></li>
+<li>Aktifkan provider <strong>Email/Password</strong></li>
+<li>Klik <strong>Save</strong></li>
+</ol>
+<h3>2.3 Membuat User Pertama (Admin)</h3>
+<ol>
+<li>Di tab <strong>Users</strong>, klik <strong>Add User</strong></li>
+<li>Masukkan email dan password untuk akun admin</li>
+<li>Catat email dan password untuk digunakan di firmware ESP32</li>
+</ol>
+<h3>2.4 Setup Realtime Database</h3>
+<ol>
+<li>Buka menu <strong>Realtime Database</strong></li>
+<li>Klik <strong>Create Database</strong></li>
+<li>Pilih lokasi server: <code>asia-southeast1</code></li>
+<li>Pilih <strong>Start in test mode</strong> (akan diubah nanti)</li>
+<li>Setelah database dibuat, klik tab <strong>Rules</strong> dan masukkan rules berikut:</li>
+</ol>
+<pre class="hljs"><code><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;rules&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;sensor_data&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;.read&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;.write&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;blowers&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;.read&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;.write&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;control_mode&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;.read&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;.write&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;history&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;.read&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;.write&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;users&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;.read&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;auth != null &amp;&amp; root.child(&#x27;user_akses&#x27;).child(auth.uid).child(&#x27;role&#x27;).val() === &#x27;admin&#x27;&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;$uid&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+        <span class="hljs-attr">&quot;.read&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;auth != null &amp;&amp; auth.uid === $uid&quot;</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;.write&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;auth != null &amp;&amp; auth.uid === $uid&quot;</span>
+      <span class="hljs-punctuation">}</span>
+    <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;user_akses&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;.read&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;auth != null &amp;&amp; root.child(&#x27;user_akses&#x27;).child(auth.uid).child(&#x27;role&#x27;).val() === &#x27;admin&#x27;&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;$uid&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+        <span class="hljs-attr">&quot;.read&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;auth != null &amp;&amp; auth.uid === $uid&quot;</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;.write&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;auth != null &amp;&amp; (root.child(&#x27;user_akses&#x27;).child(auth.uid).child(&#x27;role&#x27;).val() === &#x27;admin&#x27; || !data.exists())&quot;</span>
+      <span class="hljs-punctuation">}</span>
+    <span class="hljs-punctuation">}</span>
+  <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">}</span>
+</code></pre>
+<h3>2.5 Mendapatkan Konfigurasi Firebase</h3>
+<ol>
+<li>Di Project Settings → General → Your apps</li>
+<li>Klik ikon <strong>Web (&lt;/&gt;)</strong> → Register app</li>
+<li>Catat konfigurasi: <code>apiKey</code>, <code>authDomain</code>, <code>databaseURL</code>, <code>projectId</code>, dll.</li>
+</ol>
+<hr>
+<h2>TAHAP 3: PEMROGRAMAN FIRMWARE ESP32</h2>
+<h3>3.1 Setup Arduino IDE</h3>
+<ol>
+<li>Install <strong>Arduino IDE</strong> (v2.x)</li>
+<li>Tambahkan ESP32 Board Manager URL di Preferences:
+<code>https://dl.espressif.com/dl/package_esp32_index.json</code></li>
+<li>Install board <strong>ESP32</strong> dari Board Manager</li>
+</ol>
+<h3>3.2 Install Library yang Dibutuhkan</h3>
+<p>Melalui Library Manager Arduino IDE, install:</p>
+<ul>
+<li><code>Firebase ESP Client</code> (by Mobizt)</li>
+<li><code>DHT sensor library</code> (by Adafruit)</li>
+<li><code>RTClib</code> (by Adafruit)</li>
+<li><code>SD</code> (built-in)</li>
+</ul>
+<h3>3.3 Konfigurasi Firmware &amp; Auto Mode</h3>
+<p>Buka file <code>smart_ac.ino</code> dan sesuaikan:</p>
+<pre class="hljs"><code><span class="hljs-meta">#<span class="hljs-keyword">define</span> WIFI_SSID     <span class="hljs-string">&quot;NamaWiFiAnda&quot;</span></span>
+<span class="hljs-meta">#<span class="hljs-keyword">define</span> WIFI_PASSWORD <span class="hljs-string">&quot;PasswordWiFi&quot;</span></span>
+<span class="hljs-meta">#<span class="hljs-keyword">define</span> API_KEY       <span class="hljs-string">&quot;AIzaSy...&quot;</span>    <span class="hljs-comment">// Dari Firebase</span></span>
+<span class="hljs-meta">#<span class="hljs-keyword">define</span> DATABASE_URL  <span class="hljs-string">&quot;https://...firebasedatabase.app/&quot;</span></span>
+<span class="hljs-meta">#<span class="hljs-keyword">define</span> USER_EMAIL    <span class="hljs-string">&quot;admin@email.com&quot;</span></span>
+<span class="hljs-meta">#<span class="hljs-keyword">define</span> USER_PASSWORD <span class="hljs-string">&quot;password123&quot;</span></span>
+</code></pre>
+<p>Sistem ini menggunakan logika <em>hybrid</em> Otomatis dan Manual. Secara default, ESP32 mendengarkan node <code>/control_mode</code> di Firebase untuk beralih mode. Pada mode Otomatis, kecepatan blower disesuaikan otomatis (0-100%) berdasarkan hasil rata-rata suhu DHT22.</p>
+<h3>3.4 Upload Firmware</h3>
+<ol>
+<li>Hubungkan ESP32 ke komputer via USB</li>
+<li>Pilih board: <strong>ESP32 Dev Module</strong></li>
+<li>Pilih port COM yang sesuai</li>
+<li>Klik <strong>Upload</strong></li>
+<li>Buka Serial Monitor (115200 baud) untuk memverifikasi</li>
+</ol>
+<h3>3.5 Verifikasi</h3>
+<p>Di Serial Monitor, pastikan muncul:</p>
+<ul>
+<li><code>[1/5] Init 10 sensor DHT22... OK</code></li>
+<li><code>[2/5] Init kipas (BTS7960 + LEDC PWM)... OK</code></li>
+<li><code>[3/5] Init RTC DS3231... OK</code></li>
+<li><code>[4/5] Init SD Card... OK</code></li>
+<li><code>[5/5] Koneksi WiFi &amp; Firebase...</code></li>
+<li><code>✅ Sistem siap!</code></li>
+</ul>
+<hr>
+<h2>TAHAP 4: PEMBUATAN WEB DASHBOARD (React.js)</h2>
+<h3>4.1 Persiapan Environment (Software Tools)</h3>
+<p>Sebelum memulai pembuatan aplikasi web, pastikan Anda telah menginstal:</p>
+<ol>
+<li><strong>Node.js</strong>: Unduh dan install Node.js (disarankan versi 18 LTS ke atas) dari situs resminya. Instalasi Node.js sudah otomatis menyertakan NPM (Node Package Manager).</li>
+<li><strong>Code Editor</strong>: Visual Studio Code (VS Code) direkomendasikan untuk mempermudah penulisan kode React.</li>
+<li><strong>Git</strong>: (Opsional) untuk mengelola <em>version control</em> project Anda.</li>
+</ol>
+<h3>4.2 Inisialisasi Project</h3>
+<pre class="hljs"><code>npx create-react-app react-dashboard
+<span class="hljs-built_in">cd</span> react-dashboard
+</code></pre>
+<h3>4.3 Install Dependencies</h3>
+<pre class="hljs"><code>npm install firebase react-hot-toast react-icons recharts
+npm install @capacitor/core @capacitor/cli @capacitor/filesystem @capacitor/share
+</code></pre>
+<h3>4.4 Struktur Folder</h3>
+<pre class="hljs"><code>react-dashboard/
+├── public/
+│   └── index.html
+├── src/
+│   ├── components/
+│   │   ├── BlowerControl.jsx
+│   │   ├── LoginPage.jsx
+│   │   ├── ManagementPage.jsx
+│   │   ├── SensorCard.jsx
+│   │   └── SensorChart.jsx
+│   ├── contexts/
+│   │   └── AuthContext.jsx
+│   ├── App.jsx
+│   ├── App.css
+│   ├── firebase.js
+│   ├── index.js
+│   └── parseCsv.js
+├── capacitor.config.ts
+└── package.json
+</code></pre>
+<h3>4.5 Langkah Pembuatan File (Urutan)</h3>
+<p><strong>Step 1</strong>: Buat <code>src/firebase.js</code> - Konfigurasi koneksi Firebase
+<strong>Step 2</strong>: Buat <code>src/contexts/AuthContext.jsx</code> - Autentikasi, session, RBAC
+<strong>Step 3</strong>: Buat <code>src/components/SensorCard.jsx</code> - Kartu sensor rata-rata &amp; individual
+<strong>Step 4</strong>: Buat <code>src/components/SensorChart.jsx</code> - Grafik tren Recharts
+<strong>Step 5</strong>: Buat <code>src/components/BlowerControl.jsx</code> - Slider kontrol PWM
+<strong>Step 6</strong>: Buat <code>src/components/LoginPage.jsx</code> - Halaman login
+<strong>Step 7</strong>: Buat <code>src/components/ManagementPage.jsx</code> - Manajemen user &amp; role
+<strong>Step 8</strong>: Buat <code>src/parseCsv.js</code> - Parser CSV untuk data dummy
+<strong>Step 9</strong>: Buat <code>src/App.jsx</code> - Komponen utama dengan tab navigation
+<strong>Step 10</strong>: Buat <code>src/App.css</code> - Styling lengkap (1675 baris)
+<strong>Step 11</strong>: Buat <code>src/index.js</code> - Entry point React dengan AuthProvider</p>
+<h3>4.6 Menjalankan Development Server</h3>
+<pre class="hljs"><code>npm start
+</code></pre>
+<p>Buka browser di <code>http://localhost:3000</code></p>
+<h3>4.7 Build untuk Production</h3>
+<pre class="hljs"><code>npm run build
+</code></pre>
+<h3>4.8 Deploy ke Netlify</h3>
+<ol>
+<li>Buat akun di <a href="https://app.netlify.com/">https://app.netlify.com/</a></li>
+<li>Drag &amp; drop folder <code>build/</code> ke Netlify</li>
+<li>Atau hubungkan repository GitHub untuk auto-deploy</li>
+<li>URL deploy: <code>https://solardryeriot.netlify.app/</code></li>
+</ol>
+<hr>
+<h2>TAHAP 5: PEMBUATAN MOBILE APP (Flutter)</h2>
+<h3>5.1 Persiapan Environment (Software Tools)</h3>
+<p>Pembuatan aplikasi Android native dengan Flutter membutuhkan instalasi <em>environment</em> khusus:</p>
+<ol>
+<li><strong>Flutter SDK</strong>: Unduh Flutter SDK terbaru dari situs resminya. Ekstrak, lalu tambahkan folder <code>flutter/bin</code> ke System Environment Variables (Path) di Windows Anda.</li>
+<li><strong>Android Studio</strong>: Install Android Studio. Buka pengaturan SDK Manager dan pastikan <strong>Android SDK Platform</strong> (versi terbaru) dan <strong>Android SDK Command-line Tools</strong> telah dicentang dan terinstall.</li>
+<li><strong>VS Code Extensions</strong>: Di VS Code Anda, cari dan install ekstensi “Flutter” dan “Dart”.</li>
+<li>Jalankan perintah <code>flutter doctor</code> di terminal/command prompt. Pastikan semuanya tercentang hijau (tidak ada error).</li>
+</ol>
+<h3>5.2 Inisialisasi Project Flutter</h3>
+<pre class="hljs"><code>flutter create --org com.solardryer flutter_dashboard
+<span class="hljs-built_in">cd</span> flutter_dashboard
+</code></pre>
+<h3>5.3 Install Dependencies</h3>
+<p>Edit <code>pubspec.yaml</code> dan tambahkan:</p>
+<pre class="hljs"><code><span class="hljs-attr">dependencies:</span>
+  <span class="hljs-attr">flutter:</span>
+    <span class="hljs-attr">sdk:</span> <span class="hljs-string">flutter</span>
+  <span class="hljs-attr">firebase_core:</span> <span class="hljs-string">^3.8.1</span>
+  <span class="hljs-attr">firebase_database:</span> <span class="hljs-string">^11.2.1</span>
+  <span class="hljs-attr">fl_chart:</span> <span class="hljs-string">^0.69.2</span>
+  <span class="hljs-attr">google_fonts:</span> <span class="hljs-string">^6.2.1</span>
+  <span class="hljs-attr">fluttertoast:</span> <span class="hljs-string">^8.2.8</span>
+</code></pre>
+<p>Jalankan: <code>flutter pub get</code></p>
+<h3>5.4 Konfigurasi Firebase untuk Android</h3>
+<ol>
+<li>Di Firebase Console → Project Settings → Add app → Android</li>
+<li>Package name: <code>com.solardryer.iot</code></li>
+<li>Download <code>google-services.json</code></li>
+<li>Letakkan di <code>android/app/google-services.json</code></li>
+<li>Edit <code>android/build.gradle</code> dan <code>android/app/build.gradle</code> sesuai petunjuk Firebase</li>
+</ol>
+<h3>5.5 Struktur Folder Flutter</h3>
+<pre class="hljs"><code>flutter_dashboard/lib/
+├── main.dart
+├── screens/
+│   └── dashboard_screen.dart
+├── services/
+│   └── firebase_service.dart
+└── widgets/
+    ├── blower_control.dart
+    ├── chart_widget.dart
+    └── sensor_card.dart
+</code></pre>
+<h3>5.6 Langkah Pembuatan File (Urutan)</h3>
+<p><strong>Step 1</strong>: Buat <code>lib/services/firebase_service.dart</code> - Layanan akses Firebase
+<strong>Step 2</strong>: Buat <code>lib/widgets/sensor_card.dart</code> - Widget kartu sensor
+<strong>Step 3</strong>: Buat <code>lib/widgets/blower_control.dart</code> - Widget kontrol blower
+<strong>Step 4</strong>: Buat <code>lib/widgets/chart_widget.dart</code> - Widget grafik fl_chart
+<strong>Step 5</strong>: Buat <code>lib/screens/dashboard_screen.dart</code> - Layar utama dashboard
+<strong>Step 6</strong>: Buat <code>lib/main.dart</code> - Entry point aplikasi</p>
+<h3>5.7 Build APK</h3>
+<pre class="hljs"><code>flutter build apk --debug
+</code></pre>
+<p>File APK tersedia di: <code>build/app/outputs/flutter-apk/app-debug.apk</code></p>
+<hr>
+<h2>TAHAP 6: KONVERSI WEB KE ANDROID (Capacitor)</h2>
+<h3>6.1 Inisialisasi Capacitor</h3>
+<pre class="hljs"><code><span class="hljs-built_in">cd</span> react-dashboard
+npx <span class="hljs-built_in">cap</span> init <span class="hljs-string">&quot;Solar Dryer IoT&quot;</span> com.solardryer.iot
+npx <span class="hljs-built_in">cap</span> add android
+</code></pre>
+<h3>6.2 Konfigurasi Capacitor (<code>capacitor.config.ts</code>)</h3>
+<pre class="hljs"><code><span class="hljs-keyword">const</span> <span class="hljs-attr">config</span>: <span class="hljs-title class_">CapacitorConfig</span> = {
+  <span class="hljs-attr">appId</span>: <span class="hljs-string">&#x27;com.solardryer.iot&#x27;</span>,
+  <span class="hljs-attr">appName</span>: <span class="hljs-string">&#x27;Solar Dryer IoT&#x27;</span>,
+  <span class="hljs-attr">webDir</span>: <span class="hljs-string">&#x27;build&#x27;</span>,
+  <span class="hljs-attr">server</span>: {
+    <span class="hljs-attr">androidScheme</span>: <span class="hljs-string">&#x27;https&#x27;</span>,
+    <span class="hljs-attr">url</span>: <span class="hljs-string">&#x27;https://solardryeriot.netlify.app&#x27;</span>,
+  },
+};
+</code></pre>
+<h3>6.3 Build &amp; Sync</h3>
+<pre class="hljs"><code>npm run build
+npx <span class="hljs-built_in">cap</span> <span class="hljs-built_in">sync</span> android
+</code></pre>
+<h3>6.4 Build APK via Gradle</h3>
+<pre class="hljs"><code><span class="hljs-built_in">cd</span> android
+./gradlew assembleDebug
+</code></pre>
+<hr>
+<h2>TAHAP 7: PENGUJIAN SISTEM</h2>
+<h3>7.1 Pengujian Hardware</h3>
+<ol>
+<li>Verifikasi pembacaan 10 sensor DHT22 di Serial Monitor</li>
+<li>Verifikasi kontrol blower PWM (0%, 50%, 100%)</li>
+<li>Verifikasi logging SD Card (cek file data.csv)</li>
+<li>Verifikasi koneksi WiFi dan Firebase</li>
+</ol>
+<h3>7.2 Pengujian Web Dashboard</h3>
+<ol>
+<li>Login dengan akun admin</li>
+<li>Verifikasi data real-time muncul di Dashboard</li>
+<li>Verifikasi kontrol blower melalui tab Control</li>
+<li>Verifikasi tabel data historis di tab Data</li>
+<li>Verifikasi export CSV berfungsi</li>
+<li>Verifikasi management user (ubah role, hapus akses)</li>
+</ol>
+<h3>7.3 Pengujian Mobile App</h3>
+<ol>
+<li>Install APK di perangkat Android</li>
+<li>Verifikasi data sensor muncul real-time</li>
+<li>Verifikasi kontrol blower via slider</li>
+<li>Verifikasi grafik historis</li>
+</ol>
+<h3>7.4 Pengujian RBAC</h3>
+<ol>
+<li>Login dengan akun role “guess” → hanya bisa melihat Dashboard</li>
+<li>Login dengan role “view_data” → Dashboard + Data</li>
+<li>Login dengan role “eksekusi_data” → Dashboard + Control + Data</li>
+<li>Login dengan role “report_data” → Dashboard + Data + Export</li>
+<li>Login dengan role “admin” → Semua fitur</li>
+</ol>
+<hr>
+<h2>TAHAP 8: DEPLOYMENT FINAL</h2>
+<h3>8.1 Checklist Deployment</h3>
+<ul>
+<li>[ ] Firebase Authentication aktif</li>
+<li>[ ] Firebase RTDB rules sudah benar</li>
+<li>[ ] Web dashboard di-deploy ke Netlify</li>
+<li>[ ] APK React (Capacitor) dibangun</li>
+<li>[ ] APK Flutter dibangun</li>
+<li>[ ] ESP32 firmware ter-upload dan berjalan</li>
+<li>[ ] Semua sensor terbaca dengan benar</li>
+<li>[ ] Blower merespons perintah dari dashboard</li>
+<li>[ ] Data historis tersimpan di Firebase dan SD Card</li>
+</ul>
+
+</body>
+</html>

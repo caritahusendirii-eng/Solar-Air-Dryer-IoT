@@ -1,0 +1,42 @@
+{
+  "rules": {
+    "sensor_data": {
+      ".read": true,
+      ".write": true
+    },
+    "blowers": {
+      ".read": true,
+      ".write": true
+    },
+    "control_mode": {
+      ".read": true,
+      ".write": true
+    },
+    "history": {
+      ".read": true,
+      ".write": true
+    },
+    "site_status": {
+      ".read": true,
+      ".write": "auth != null && root.child('user_akses').child(auth.uid).child('role').val() === 'admin'"
+    },
+    "users": {
+      ".read": "auth != null && root.child('user_akses').child(auth.uid).child('role').val() === 'admin'",
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+    "akses": {
+      ".read": "auth != null",
+      ".write": false
+    },
+    "user_akses": {
+      ".read": "auth != null && root.child('user_akses').child(auth.uid).child('role').val() === 'admin'",
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && (root.child('user_akses').child(auth.uid).child('role').val() === 'admin' || !data.exists())"
+      }
+    }
+  }
+}

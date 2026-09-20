@@ -1,0 +1,53 @@
+# ============ DEPENDENCIES ============
+node_modules/
+.dart_tool/
+.pub-cache/
+
+# ============ BUILD OUTPUT ============
+build/
+*.apk
+react-dashboard/build/
+flutter_dashboard/build/
+
+# ============ ENVIRONMENT & CREDENTIALS ============
+.env
+.env.*
+!.env.example
+*.keystore
+*.jks
+key.properties
+
+# Google Services (berisi Firebase config)
+google-services.json
+GoogleService-Info.plist
+firebase_options.dart
+firebase_app_id_file.json
+
+# ============ DEPLOYMENT STATE ============
+.netlify/
+.vercel/
+
+# ============ IDE & OS ============
+.vscode/
+.idea/
+*.iml
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ============ LOGS ============
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ============ LARGE/TEMPORARY FILES ============
+screenshots.zip
+*.bak
+
+# ============ FLUTTER GENERATED ============
+.flutter-plugins-dependencies
+.metadata
+.packages
+
+# ============ PERSONAL DATA ============
+sample/

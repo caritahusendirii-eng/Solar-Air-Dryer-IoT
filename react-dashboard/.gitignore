@@ -1,0 +1,41 @@
+﻿# Dependencies
+node_modules/
+
+# Production build
+build/
+
+# Environment variables
+.env
+.env.local
+.env.production
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Netlify
+.netlify/
+
+# Vercel
+.vercel/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Android build
+android/
+
+# Large files
+screenshots.zip
+
+# Backup files
+*.bak

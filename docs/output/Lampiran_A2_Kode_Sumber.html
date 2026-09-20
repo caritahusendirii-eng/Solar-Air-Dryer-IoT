@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Lampiran A2 Kode Sumber</title>
+  
+<style>
+  body { font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #333; max-width: 900px; margin: 0 auto; padding: 2rem; }
+  h1, h2, h3 { color: #1e3a8a; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.5rem; margin-top: 2rem; }
+  pre { background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 8px; overflow-x: auto; font-size: 13px; font-family: Consolas, Monaco, "Andale Mono", "Ubuntu Mono", monospace; }
+  code { font-family: Consolas, Monaco, "Andale Mono", monospace; background: #f3f4f6; padding: 0.2rem 0.4rem; border-radius: 4px; color: #be185d; font-size: 0.9em; }
+  pre code { background: none; padding: 0; color: inherit; }
+  table { width: 100%; border-collapse: collapse; margin-top: 1rem; margin-bottom: 1rem; }
+  th, td { border: 1px solid #d1d5db; padding: 0.75rem; text-align: left; }
+  th { background-color: #f3f4f6; font-weight: 600; }
+  tr:nth-child(even) { background-color: #f9fafb; }
+  .hljs-keyword { color: #569cd6; font-weight: bold; }
+  .hljs-string { color: #ce9178; }
+  .hljs-number { color: #b5cea8; }
+  .hljs-built_in { color: #4ec9b0; }
+  .hljs-comment { color: #6a9955; font-style: italic; }
+  .hljs-title { color: #dcdcaa; }
+</style>
+
+</head>
+<body>
+  <h1>LAMPIRAN A - DOKUMENTASI KODE SUMBER (BAGIAN 2)</h1>
+<h2>Komponen React.js - Web Dashboard</h2>
+<hr>
+<h3>File: <code>react-dashboard/src/contexts/AuthContext.jsx</code></h3>
+<p><strong>Deskripsi</strong>: Context provider untuk autentikasi Firebase, session management (1 jam), presence system, dan Role-Based Access Control (RBAC) dengan 5 level role.</p>
+<pre class="hljs"><code><span class="hljs-keyword">import</span> <span class="hljs-title class_">React</span>, { createContext, useContext, useState, useEffect, useCallback } <span class="hljs-keyword">from</span> <span class="hljs-string">&quot;react&quot;</span>;
+<span class="hljs-keyword">import</span> { onAuthStateChanged, signInWithEmailAndPassword, signOut } <span class="hljs-keyword">from</span> <span class="hljs-string">&quot;firebase/auth&quot;</span>;
+<span class="hljs-keyword">import</span> { ref, onValue, set, get, remove, onDisconnect } <span class="hljs-keyword">from</span> <span class="hljs-string">&quot;firebase/database&quot;</span>;
+<span class="hljs-keyword">import</span> { auth, database } <span class="hljs-keyword">from</span> <span class="hljs-string">&quot;../firebase&quot;</span>;
+
+<span class="hljs-keyword">const</span> <span class="hljs-title class_">AuthContext</span> = <span class="hljs-title function_">createContext</span>(<span class="hljs-literal">null</span>);
+<span class="hljs-keyword">const</span> <span class="hljs-variable constant_">SESSION_DURATION</span> = <span class="hljs-number">60</span> * <span class="hljs-number">60</span> * <span class="hljs-number">1000</span>; <span class="hljs-comment">// 1 jam</span>
+<span class="hljs-keyword">const</span> <span class="hljs-variable constant_">LOGIN_TIMESTAMP_KEY</span> = <span class="hljs-string">&quot;solardryer_login_timestamp&quot;</span>;
+
+<span class="hljs-keyword">const</span> <span class="hljs-variable constant_">ROLE_CONFIG</span> = {
+  <span class="hljs-attr">guess</span>:         { <span class="hljs-attr">level</span>: <span class="hljs-number">0</span>, <span class="hljs-attr">tabs</span>: [<span class="hljs-string">&quot;dashboard&quot;</span>] },
+  <span class="hljs-attr">view_data</span>:     { <span class="hljs-attr">level</span>: <span class="hljs-number">1</span>, <span class="hljs-attr">tabs</span>: [<span class="hljs-string">&quot;dashboard&quot;</span>, <span class="hljs-string">&quot;data&quot;</span>] },
+  <span class="hljs-attr">eksekusi_data</span>: { <span class="hljs-attr">level</span>: <span class="hljs-number">2</span>, <span class="hljs-attr">tabs</span>: [<span class="hljs-string">&quot;dashboard&quot;</span>, <span class="hljs-string">&quot;control&quot;</span>, <span class="hljs-string">&quot;data&quot;</span>] },
+  <span class="hljs-attr">report_data</span>:   { <span class="hljs-attr">level</span>: <span class="hljs-number">3</span>, <span class="hljs-attr">tabs</span>: [<span class="hljs-string">&quot;dashboard&quot;</span>, <span class="hljs-string">&quot;data&quot;</span>] },
+  <span class="hljs-attr">admin</span>:         { <span class="hljs-attr">level</span>: <span class="hljs-number">4</span>, <span class="hljs-attr">tabs</span>: [<span class="hljs-string">&quot;dashboard&quot;</span>, <span class="hljs-string">&quot;control&quot;</span>, <span class="hljs-string">&quot;data&quot;</span>, <span class="hljs-string">&quot;management&quot;</span>] },
+};
+
+<span class="hljs-keyword">export</span> <span class="hljs-keyword">function</span> <span class="hljs-title function_">canAccessTab</span>(<span class="hljs-params">role, tabId</span>) {
+  <span class="hljs-keyword">const</span> config = <span class="hljs-variable constant_">ROLE_CONFIG</span>[role];
+  <span class="hljs-keyword">if</span> (!config) <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
+  <span class="hljs-keyword">return</span> config.<span class="hljs-property">tabs</span>.<span class="hljs-title function_">includes</span>(tabId);
+}
+
+<span class="hljs-keyword">export</span> <span class="hljs-keyword">function</span> <span class="hljs-title function_">canExport</span>(<span class="hljs-params">role</span>) {
+  <span class="hljs-keyword">return</span> role === <span class="hljs-string">&quot;report_data&quot;</span> || role === <span class="hljs-string">&quot;admin&quot;</span>;
+}
+
+<span class="hljs-keyword">export</span> <span class="hljs-keyword">function</span> <span class="hljs-title function_">canManage</span>(<span class="hljs-params">role</span>) {
+  <span class="hljs-keyword">return</span> role === <span class="hljs-string">&quot;admin&quot;</span>;
+}
+
+<span class="hljs-keyword">export</span> <span class="hljs-keyword">function</span> <span class="hljs-title function_">AuthProvider</span>(<span class="hljs-params">{ children }</span>) {
+  <span class="hljs-keyword">const</span> [currentUser, setCurrentUser] = <span class="hljs-title function_">useState</span>(<span class="hljs-literal">null</span>);
+  <span class="hljs-keyword">const</span> [userRole, setUserRole] = <span class="hljs-title function_">useState</span>(<span class="hljs-literal">null</span>);
+  <span class="hljs-keyword">const</span> [loading, setLoading] = <span class="hljs-title function_">useState</span>(<span class="hljs-literal">true</span>);
+  <span class="hljs-keyword">const</span> [sessionTimer, setSessionTimer] = <span class="hljs-title function_">useState</span>(<span class="hljs-literal">null</span>);
+
+  <span class="hljs-keyword">const</span> logout = <span class="hljs-title function_">useCallback</span>(<span class="hljs-title function_">async</span> () =&gt; {
+    <span class="hljs-keyword">try</span> {
+      <span class="hljs-keyword">if</span> (sessionTimer) <span class="hljs-built_in">clearTimeout</span>(sessionTimer);
+      <span class="hljs-variable language_">localStorage</span>.<span class="hljs-title function_">removeItem</span>(<span class="hljs-variable constant_">LOGIN_TIMESTAMP_KEY</span>);
+      <span class="hljs-keyword">if</span> (auth.<span class="hljs-property">currentUser</span>) {
+        <span class="hljs-keyword">const</span> presRef = <span class="hljs-title function_">ref</span>(database, <span class="hljs-string">`presence/<span class="hljs-subst">${auth.currentUser.uid}</span>`</span>);
+        <span class="hljs-keyword">await</span> <span class="hljs-title function_">remove</span>(presRef).<span class="hljs-title function_">catch</span>(<span class="hljs-function">() =&gt;</span> {});
+      }
+      <span class="hljs-title function_">setUserRole</span>(<span class="hljs-literal">null</span>);
+      <span class="hljs-title function_">setCurrentUser</span>(<span class="hljs-literal">null</span>);
+      <span class="hljs-keyword">await</span> <span class="hljs-title function_">signOut</span>(auth);
+    } <span class="hljs-keyword">catch</span> (err) { <span class="hljs-variable language_">console</span>.<span class="hljs-title function_">error</span>(<span class="hljs-string">&quot;Logout error:&quot;</span>, err); }
+  }, [sessionTimer]);
+
+  <span class="hljs-keyword">const</span> startSessionTimer = <span class="hljs-title function_">useCallback</span>(<span class="hljs-function">(<span class="hljs-params">loginTimestamp</span>) =&gt;</span> {
+    <span class="hljs-keyword">if</span> (sessionTimer) <span class="hljs-built_in">clearTimeout</span>(sessionTimer);
+    <span class="hljs-keyword">const</span> elapsed = <span class="hljs-title class_">Date</span>.<span class="hljs-title function_">now</span>() - loginTimestamp;
+    <span class="hljs-keyword">const</span> remaining = <span class="hljs-variable constant_">SESSION_DURATION</span> - elapsed;
+    <span class="hljs-keyword">if</span> (remaining &lt;= <span class="hljs-number">0</span>) { <span class="hljs-title function_">logout</span>(); <span class="hljs-keyword">return</span>; }
+    <span class="hljs-keyword">const</span> timer = <span class="hljs-built_in">setTimeout</span>(<span class="hljs-function">() =&gt;</span> { <span class="hljs-title function_">logout</span>(); }, remaining);
+    <span class="hljs-title function_">setSessionTimer</span>(timer);
+  }, [sessionTimer, logout]);
+
+  <span class="hljs-keyword">const</span> <span class="hljs-title function_">login</span> = <span class="hljs-keyword">async</span> (<span class="hljs-params">email, password</span>) =&gt; {
+    <span class="hljs-keyword">const</span> userCredential = <span class="hljs-keyword">await</span> <span class="hljs-title function_">signInWithEmailAndPassword</span>(auth, email, password);
+    <span class="hljs-keyword">const</span> user = userCredential.<span class="hljs-property">user</span>;
+    <span class="hljs-keyword">const</span> now = <span class="hljs-title class_">Date</span>.<span class="hljs-title function_">now</span>();
+    <span class="hljs-variable language_">localStorage</span>.<span class="hljs-title function_">setItem</span>(<span class="hljs-variable constant_">LOGIN_TIMESTAMP_KEY</span>, now.<span class="hljs-title function_">toString</span>());
+    <span class="hljs-keyword">try</span> {
+      <span class="hljs-keyword">await</span> <span class="hljs-title function_">set</span>(<span class="hljs-title function_">ref</span>(database, <span class="hljs-string">`users/<span class="hljs-subst">${user.uid}</span>`</span>), {
+        <span class="hljs-attr">email</span>: user.<span class="hljs-property">email</span>,
+        <span class="hljs-attr">displayName</span>: user.<span class="hljs-property">displayName</span> || user.<span class="hljs-property">email</span>.<span class="hljs-title function_">split</span>(<span class="hljs-string">&quot;@&quot;</span>)[<span class="hljs-number">0</span>],
+        <span class="hljs-attr">lastLogin</span>: now,
+      });
+      <span class="hljs-keyword">const</span> aksesSnap = <span class="hljs-keyword">await</span> <span class="hljs-title function_">get</span>(<span class="hljs-title function_">ref</span>(database, <span class="hljs-string">`user_akses/<span class="hljs-subst">${user.uid}</span>`</span>));
+      <span class="hljs-keyword">if</span> (!aksesSnap.<span class="hljs-title function_">exists</span>()) {
+        <span class="hljs-keyword">await</span> <span class="hljs-title function_">set</span>(<span class="hljs-title function_">ref</span>(database, <span class="hljs-string">`user_akses/<span class="hljs-subst">${user.uid}</span>`</span>), { <span class="hljs-attr">role</span>: <span class="hljs-string">&quot;guess&quot;</span>, <span class="hljs-attr">updatedAt</span>: now });
+      }
+    } <span class="hljs-keyword">catch</span> (err) { <span class="hljs-variable language_">console</span>.<span class="hljs-title function_">warn</span>(<span class="hljs-string">&quot;Could not write user data:&quot;</span>, err); }
+    <span class="hljs-keyword">return</span> user;
+  };
+
+  <span class="hljs-title function_">useEffect</span>(<span class="hljs-function">() =&gt;</span> {
+    <span class="hljs-keyword">const</span> unsubAuth = <span class="hljs-title function_">onAuthStateChanged</span>(auth, <span class="hljs-function">(<span class="hljs-params">user</span>) =&gt;</span> {
+      <span class="hljs-keyword">if</span> (user) {
+        <span class="hljs-title function_">setCurrentUser</span>(user);
+        <span class="hljs-keyword">const</span> storedTimestamp = <span class="hljs-variable language_">localStorage</span>.<span class="hljs-title function_">getItem</span>(<span class="hljs-variable constant_">LOGIN_TIMESTAMP_KEY</span>);
+        <span class="hljs-keyword">if</span> (storedTimestamp) {
+          <span class="hljs-keyword">const</span> ts = <span class="hljs-built_in">parseInt</span>(storedTimestamp, <span class="hljs-number">10</span>);
+          <span class="hljs-keyword">if</span> (<span class="hljs-title class_">Date</span>.<span class="hljs-title function_">now</span>() - ts &gt;= <span class="hljs-variable constant_">SESSION_DURATION</span>) { <span class="hljs-title function_">logout</span>(); <span class="hljs-keyword">return</span>; }
+          <span class="hljs-title function_">startSessionTimer</span>(ts);
+        } <span class="hljs-keyword">else</span> {
+          <span class="hljs-keyword">const</span> now = <span class="hljs-title class_">Date</span>.<span class="hljs-title function_">now</span>();
+          <span class="hljs-variable language_">localStorage</span>.<span class="hljs-title function_">setItem</span>(<span class="hljs-variable constant_">LOGIN_TIMESTAMP_KEY</span>, now.<span class="hljs-title function_">toString</span>());
+          <span class="hljs-title function_">startSessionTimer</span>(now);
+        }
+        <span class="hljs-keyword">const</span> presRef = <span class="hljs-title function_">ref</span>(database, <span class="hljs-string">`presence/<span class="hljs-subst">${user.uid}</span>`</span>);
+        <span class="hljs-title function_">set</span>(presRef, { <span class="hljs-attr">email</span>: user.<span class="hljs-property">email</span>, <span class="hljs-attr">displayName</span>: user.<span class="hljs-property">displayName</span> || user.<span class="hljs-property">email</span>.<span class="hljs-title function_">split</span>(<span class="hljs-string">&quot;@&quot;</span>)[<span class="hljs-number">0</span>], <span class="hljs-attr">lastSeen</span>: <span class="hljs-title class_">Date</span>.<span class="hljs-title function_">now</span>() });
+        <span class="hljs-title function_">onDisconnect</span>(presRef).<span class="hljs-title function_">remove</span>();
+        <span class="hljs-keyword">const</span> roleRef = <span class="hljs-title function_">ref</span>(database, <span class="hljs-string">`user_akses/<span class="hljs-subst">${user.uid}</span>/role`</span>);
+        <span class="hljs-title function_">onValue</span>(roleRef, <span class="hljs-function">(<span class="hljs-params">snapshot</span>) =&gt;</span> {
+          <span class="hljs-title function_">setUserRole</span>(snapshot.<span class="hljs-title function_">exists</span>() ? snapshot.<span class="hljs-title function_">val</span>() : <span class="hljs-string">&quot;guess&quot;</span>);
+          <span class="hljs-title function_">setLoading</span>(<span class="hljs-literal">false</span>);
+        });
+      } <span class="hljs-keyword">else</span> {
+        <span class="hljs-title function_">setCurrentUser</span>(<span class="hljs-literal">null</span>); <span class="hljs-title function_">setUserRole</span>(<span class="hljs-literal">null</span>); <span class="hljs-title function_">setLoading</span>(<span class="hljs-literal">false</span>);
+      }
+    });
+    <span class="hljs-keyword">return</span> <span class="hljs-function">() =&gt;</span> <span class="hljs-title function_">unsubAuth</span>();
+  }, []);
+
+  <span class="hljs-keyword">return</span> (
+    <span class="language-xml"><span class="hljs-tag">&lt;<span class="hljs-name">AuthContext.Provider</span> <span class="hljs-attr">value</span>=<span class="hljs-string">{{</span> <span class="hljs-attr">currentUser</span>, <span class="hljs-attr">userRole</span>, <span class="hljs-attr">loading</span>, <span class="hljs-attr">login</span>, <span class="hljs-attr">logout</span> }}&gt;</span>
+      {children}
+    <span class="hljs-tag">&lt;/<span class="hljs-name">AuthContext.Provider</span>&gt;</span></span>
+  );
+}
+
+<span class="hljs-keyword">export</span> <span class="hljs-keyword">function</span> <span class="hljs-title function_">useAuth</span>(<span class="hljs-params"></span>) {
+  <span class="hljs-keyword">const</span> context = <span class="hljs-title function_">useContext</span>(<span class="hljs-title class_">AuthContext</span>);
+  <span class="hljs-keyword">if</span> (!context) <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">Error</span>(<span class="hljs-string">&quot;useAuth must be used within an AuthProvider&quot;</span>);
+  <span class="hljs-keyword">return</span> context;
+}
+</code></pre>
+<hr>
+<h3>File: <code>react-dashboard/src/components/SensorCard.jsx</code></h3>
+<p><strong>Deskripsi</strong>: Komponen kartu sensor untuk menampilkan rata-rata suhu/kelembaban dan data individual per sensor.</p>
+<pre class="hljs"><code><span class="hljs-keyword">import</span> <span class="hljs-title class_">React</span> <span class="hljs-keyword">from</span> <span class="hljs-string">&quot;react&quot;</span>;
+<span class="hljs-keyword">import</span> { <span class="hljs-title class_">WiThermometer</span>, <span class="hljs-title class_">WiHumidity</span> } <span class="hljs-keyword">from</span> <span class="hljs-string">&quot;react-icons/wi&quot;</span>;
+
+<span class="hljs-keyword">const</span> configs = {
+  <span class="hljs-attr">temperature</span>: {
+    <span class="hljs-attr">icon</span>: <span class="hljs-function">(<span class="hljs-params">s</span>) =&gt;</span> <span class="language-xml"><span class="hljs-tag">&lt;<span class="hljs-name">WiThermometer</span> <span class="hljs-attr">size</span>=<span class="hljs-string">{s}</span> /&gt;</span></span>,
+    <span class="hljs-attr">label</span>: <span class="hljs-string">&quot;Temperature&quot;</span>, <span class="hljs-attr">color</span>: <span class="hljs-string">&quot;#e85d04&quot;</span>, <span class="hljs-attr">bg</span>: <span class="hljs-string">&quot;#fff3e0&quot;</span>, <span class="hljs-attr">unit</span>: <span class="hljs-string">&quot;°C&quot;</span>,
+  },
+  <span class="hljs-attr">humidity</span>: {
+    <span class="hljs-attr">icon</span>: <span class="hljs-function">(<span class="hljs-params">s</span>) =&gt;</span> <span class="language-xml"><span class="hljs-tag">&lt;<span class="hljs-name">WiHumidity</span> <span class="hljs-attr">size</span>=<span class="hljs-string">{s}</span> /&gt;</span></span>,
+    <span class="hljs-attr">label</span>: <span class="hljs-string">&quot;Humidity&quot;</span>, <span class="hljs-attr">color</span>: <span class="hljs-string">&quot;#0077b6&quot;</span>, <span class="hljs-attr">bg</span>: <span class="hljs-string">&quot;#e8f4f8&quot;</span>, <span class="hljs-attr">unit</span>: <span class="hljs-string">&quot;%&quot;</span>,
+  },
+};
+
+<span class="hljs-keyword">export</span> <span class="hljs-keyword">default</span> <span class="hljs-keyword">function</span> <span class="hljs-title function_">SensorCard</span>(<span class="hljs-params">{ type, value }</span>) {
+  <span class="hljs-keyword">const</span> c = configs[type];
+  <span class="hljs-keyword">const</span> maxVal = type === <span class="hljs-string">&quot;temperature&quot;</span> ? <span class="hljs-number">60</span> : <span class="hljs-number">100</span>;
+  <span class="hljs-keyword">const</span> pct = value !== <span class="hljs-literal">null</span> &amp;&amp; value !== <span class="hljs-literal">undefined</span> ? <span class="hljs-title class_">Math</span>.<span class="hljs-title function_">min</span>((value / maxVal) * <span class="hljs-number">100</span>, <span class="hljs-number">100</span>) : <span class="hljs-number">0</span>;
+  <span class="hljs-keyword">return</span> (
+    <span class="language-xml"><span class="hljs-tag">&lt;<span class="hljs-name">div</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;sensor-card card&quot;</span>&gt;</span>
+      <span class="hljs-tag">&lt;<span class="hljs-name">div</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;sc-top&quot;</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">div</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;sc-icon&quot;</span> <span class="hljs-attr">style</span>=<span class="hljs-string">{{</span> <span class="hljs-attr">color:</span> <span class="hljs-attr">c.color</span>, <span class="hljs-attr">background:</span> <span class="hljs-attr">c.bg</span> }}&gt;</span>{c.icon(28)}<span class="hljs-tag">&lt;/<span class="hljs-name">div</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">span</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;live-badge&quot;</span>&gt;</span>Live<span class="hljs-tag">&lt;/<span class="hljs-name">span</span>&gt;</span>
+      <span class="hljs-tag">&lt;/<span class="hljs-name">div</span>&gt;</span>
+      <span class="hljs-tag">&lt;<span class="hljs-name">h3</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;sc-label&quot;</span>&gt;</span>{c.label}<span class="hljs-tag">&lt;/<span class="hljs-name">h3</span>&gt;</span>
+      <span class="hljs-tag">&lt;<span class="hljs-name">p</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;sc-value&quot;</span> <span class="hljs-attr">style</span>=<span class="hljs-string">{{</span> <span class="hljs-attr">color:</span> <span class="hljs-attr">c.color</span> }}&gt;</span>
+        {value !== null &amp;&amp; value !== undefined ? value.toFixed(1) : &quot;--&quot;}{c.unit}
+      <span class="hljs-tag">&lt;/<span class="hljs-name">p</span>&gt;</span>
+      <span class="hljs-tag">&lt;<span class="hljs-name">div</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;sc-bar-track&quot;</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">div</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;sc-bar-fill&quot;</span> <span class="hljs-attr">style</span>=<span class="hljs-string">{{</span> <span class="hljs-attr">width:</span> `${<span class="hljs-attr">pct</span>}%`, <span class="hljs-attr">background:</span> <span class="hljs-attr">c.color</span> }} /&gt;</span>
+      <span class="hljs-tag">&lt;/<span class="hljs-name">div</span>&gt;</span>
+    <span class="hljs-tag">&lt;/<span class="hljs-name">div</span>&gt;</span></span>
+  );
+}
+
+<span class="hljs-keyword">export</span> <span class="hljs-keyword">function</span> <span class="hljs-title function_">IndividualSensorCard</span>(<span class="hljs-params">{ sensor }</span>) {
+  <span class="hljs-keyword">const</span> <span class="hljs-title function_">isNull</span> = (<span class="hljs-params">v</span>) =&gt; v === <span class="hljs-string">&quot;null&quot;</span> || v === <span class="hljs-literal">null</span> || v === <span class="hljs-literal">undefined</span>;
+  <span class="hljs-keyword">const</span> hasTemp = !<span class="hljs-title function_">isNull</span>(sensor.<span class="hljs-property">t</span>);
+  <span class="hljs-keyword">const</span> hasHum = !<span class="hljs-title function_">isNull</span>(sensor.<span class="hljs-property">h</span>);
+  <span class="hljs-keyword">const</span> active = hasTemp || hasHum;
+  <span class="hljs-keyword">const</span> tVal = hasTemp ? <span class="hljs-title class_">Number</span>(sensor.<span class="hljs-property">t</span>) : <span class="hljs-literal">null</span>;
+  <span class="hljs-keyword">const</span> hVal = hasHum ? <span class="hljs-title class_">Number</span>(sensor.<span class="hljs-property">h</span>) : <span class="hljs-literal">null</span>;
+  <span class="hljs-keyword">return</span> (
+    <span class="language-xml"><span class="hljs-tag">&lt;<span class="hljs-name">div</span> <span class="hljs-attr">className</span>=<span class="hljs-string">{</span>`<span class="hljs-attr">ind-sensor-card</span> ${<span class="hljs-attr">active</span> ? &quot;<span class="hljs-attr">active</span>&quot; <span class="hljs-attr">:</span> &quot;<span class="hljs-attr">inactive</span>&quot;}`}&gt;</span>
+      <span class="hljs-tag">&lt;<span class="hljs-name">div</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;isc-header&quot;</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">span</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;isc-label&quot;</span>&gt;</span>Sensor {sensor.sensor}<span class="hljs-tag">&lt;/<span class="hljs-name">span</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">span</span> <span class="hljs-attr">className</span>=<span class="hljs-string">{</span>`<span class="hljs-attr">isc-dot</span> ${<span class="hljs-attr">active</span> ? &quot;<span class="hljs-attr">on</span>&quot; <span class="hljs-attr">:</span> &quot;<span class="hljs-attr">off</span>&quot;}`} /&gt;</span>
+      <span class="hljs-tag">&lt;/<span class="hljs-name">div</span>&gt;</span>
+      <span class="hljs-tag">&lt;<span class="hljs-name">div</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;isc-readings&quot;</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">div</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;isc-metric&quot;</span>&gt;</span>
+          <span class="hljs-tag">&lt;<span class="hljs-name">WiThermometer</span> <span class="hljs-attr">size</span>=<span class="hljs-string">{20}</span> <span class="hljs-attr">style</span>=<span class="hljs-string">{{</span> <span class="hljs-attr">color:</span> &quot;#<span class="hljs-attr">e85d04</span>&quot; }} /&gt;</span>
+          <span class="hljs-tag">&lt;<span class="hljs-name">span</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;isc-val&quot;</span> <span class="hljs-attr">style</span>=<span class="hljs-string">{{</span> <span class="hljs-attr">color:</span> <span class="hljs-attr">hasTemp</span> ? &quot;#<span class="hljs-attr">e85d04</span>&quot; <span class="hljs-attr">:</span> &quot;#<span class="hljs-attr">bbb</span>&quot; }}&gt;</span>
+            {tVal !== null ? tVal.toFixed(1) : &quot;--&quot;}
+          <span class="hljs-tag">&lt;/<span class="hljs-name">span</span>&gt;</span>
+          <span class="hljs-tag">&lt;<span class="hljs-name">span</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;isc-unit&quot;</span>&gt;</span>°C<span class="hljs-tag">&lt;/<span class="hljs-name">span</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">div</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">div</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;isc-metric&quot;</span>&gt;</span>
+          <span class="hljs-tag">&lt;<span class="hljs-name">WiHumidity</span> <span class="hljs-attr">size</span>=<span class="hljs-string">{20}</span> <span class="hljs-attr">style</span>=<span class="hljs-string">{{</span> <span class="hljs-attr">color:</span> &quot;#<span class="hljs-attr">0077b6</span>&quot; }} /&gt;</span>
+          <span class="hljs-tag">&lt;<span class="hljs-name">span</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;isc-val&quot;</span> <span class="hljs-attr">style</span>=<span class="hljs-string">{{</span> <span class="hljs-attr">color:</span> <span class="hljs-attr">hasHum</span> ? &quot;#<span class="hljs-attr">0077b6</span>&quot; <span class="hljs-attr">:</span> &quot;#<span class="hljs-attr">bbb</span>&quot; }}&gt;</span>
+            {hVal !== null ? hVal.toFixed(1) : &quot;N/A&quot;}
+          <span class="hljs-tag">&lt;/<span class="hljs-name">span</span>&gt;</span>
+          <span class="hljs-tag">&lt;<span class="hljs-name">span</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;isc-unit&quot;</span>&gt;</span>{hasHum ? &quot;%&quot; : &quot;&quot;}<span class="hljs-tag">&lt;/<span class="hljs-name">span</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">div</span>&gt;</span>
+      <span class="hljs-tag">&lt;/<span class="hljs-name">div</span>&gt;</span>
+      {!active &amp;&amp; <span class="hljs-tag">&lt;<span class="hljs-name">div</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;isc-offline&quot;</span>&gt;</span>Tidak Aktif<span class="hljs-tag">&lt;/<span class="hljs-name">div</span>&gt;</span>}
+    <span class="hljs-tag">&lt;/<span class="hljs-name">div</span>&gt;</span></span>
+  );
+}
+</code></pre>
+<hr>
+<h3>File: <code>react-dashboard/src/components/SensorChart.jsx</code></h3>
+<p><strong>Deskripsi</strong>: Komponen grafik garis menggunakan Recharts untuk visualisasi tren suhu dan kelembaban.</p>
+<pre class="hljs"><code><span class="hljs-keyword">import</span> <span class="hljs-title class_">React</span> <span class="hljs-keyword">from</span> <span class="hljs-string">&quot;react&quot;</span>;
+<span class="hljs-keyword">import</span> { <span class="hljs-title class_">LineChart</span>, <span class="hljs-title class_">Line</span>, <span class="hljs-title class_">XAxis</span>, <span class="hljs-title class_">YAxis</span>, <span class="hljs-title class_">CartesianGrid</span>, <span class="hljs-title class_">Tooltip</span>, <span class="hljs-title class_">ResponsiveContainer</span>, <span class="hljs-title class_">Legend</span> } <span class="hljs-keyword">from</span> <span class="hljs-string">&quot;recharts&quot;</span>;
+<span class="hljs-keyword">import</span> { <span class="hljs-title class_">IoTrendingUp</span> } <span class="hljs-keyword">from</span> <span class="hljs-string">&quot;react-icons/io5&quot;</span>;
+
+<span class="hljs-keyword">export</span> <span class="hljs-keyword">default</span> <span class="hljs-keyword">function</span> <span class="hljs-title function_">SensorChart</span>(<span class="hljs-params">{ data }</span>) {
+  <span class="hljs-keyword">const</span> chartData = data.<span class="hljs-title function_">map</span>(<span class="hljs-function">(<span class="hljs-params">entry</span>) =&gt;</span> ({
+    <span class="hljs-attr">waktu</span>: entry.<span class="hljs-property">waktu</span> || <span class="hljs-string">&quot;&quot;</span>,
+    <span class="hljs-attr">avg_t</span>: <span class="hljs-keyword">typeof</span> entry.<span class="hljs-property">avg_t</span> === <span class="hljs-string">&quot;number&quot;</span> ? entry.<span class="hljs-property">avg_t</span> : <span class="hljs-literal">null</span>,
+    <span class="hljs-attr">avg_h</span>: <span class="hljs-keyword">typeof</span> entry.<span class="hljs-property">avg_h</span> === <span class="hljs-string">&quot;number&quot;</span> ? entry.<span class="hljs-property">avg_h</span> : <span class="hljs-literal">null</span>,
+  }));
+
+  <span class="hljs-keyword">const</span> <span class="hljs-title function_">CustomTooltip</span> = (<span class="hljs-params">{ active, payload, label }</span>) =&gt; {
+    <span class="hljs-keyword">if</span> (!active || !payload?.<span class="hljs-property">length</span>) <span class="hljs-keyword">return</span> <span class="hljs-literal">null</span>;
+    <span class="hljs-keyword">return</span> (
+      <span class="language-xml"><span class="hljs-tag">&lt;<span class="hljs-name">div</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;ct-tooltip&quot;</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">p</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;ct-time&quot;</span>&gt;</span>{label}<span class="hljs-tag">&lt;/<span class="hljs-name">p</span>&gt;</span>
+        {payload.map((e, i) =&gt; (
+          <span class="hljs-tag">&lt;<span class="hljs-name">p</span> <span class="hljs-attr">key</span>=<span class="hljs-string">{i}</span> <span class="hljs-attr">style</span>=<span class="hljs-string">{{</span> <span class="hljs-attr">color:</span> <span class="hljs-attr">e.color</span> }}&gt;</span>
+            {e.name === &quot;avg_t&quot; ? &quot;Suhu&quot; : &quot;Kelembaban&quot;}: <span class="hljs-tag">&lt;<span class="hljs-name">strong</span>&gt;</span>{e.value?.toFixed(1)}{e.name === &quot;avg_t&quot; ? &quot;°C&quot; : &quot;%&quot;}<span class="hljs-tag">&lt;/<span class="hljs-name">strong</span>&gt;</span>
+          <span class="hljs-tag">&lt;/<span class="hljs-name">p</span>&gt;</span>
+        ))}
+      <span class="hljs-tag">&lt;/<span class="hljs-name">div</span>&gt;</span></span>
+    );
+  };
+
+  <span class="hljs-keyword">return</span> (
+    <span class="language-xml"><span class="hljs-tag">&lt;<span class="hljs-name">div</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;chart-card card&quot;</span>&gt;</span>
+      <span class="hljs-tag">&lt;<span class="hljs-name">div</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;chart-header&quot;</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">IoTrendingUp</span> <span class="hljs-attr">size</span>=<span class="hljs-string">{22}</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;chart-icon&quot;</span> /&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">div</span>&gt;</span>
+          <span class="hljs-tag">&lt;<span class="hljs-name">h3</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;chart-title&quot;</span>&gt;</span>Tren Suhu &amp; Kelembaban<span class="hljs-tag">&lt;/<span class="hljs-name">h3</span>&gt;</span>
+          <span class="hljs-tag">&lt;<span class="hljs-name">p</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;chart-sub&quot;</span>&gt;</span>Pemantauan real-time rata-rata sensor<span class="hljs-tag">&lt;/<span class="hljs-name">p</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">div</span>&gt;</span>
+      <span class="hljs-tag">&lt;/<span class="hljs-name">div</span>&gt;</span>
+      {chartData.length === 0 ? (
+        <span class="hljs-tag">&lt;<span class="hljs-name">div</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;chart-empty&quot;</span>&gt;</span>Belum ada data historis...<span class="hljs-tag">&lt;/<span class="hljs-name">div</span>&gt;</span>
+      ) : (
+        <span class="hljs-tag">&lt;<span class="hljs-name">ResponsiveContainer</span> <span class="hljs-attr">width</span>=<span class="hljs-string">&quot;100%&quot;</span> <span class="hljs-attr">height</span>=<span class="hljs-string">{220}</span>&gt;</span>
+          <span class="hljs-tag">&lt;<span class="hljs-name">LineChart</span> <span class="hljs-attr">data</span>=<span class="hljs-string">{chartData}</span> <span class="hljs-attr">margin</span>=<span class="hljs-string">{{</span> <span class="hljs-attr">top:</span> <span class="hljs-attr">10</span>, <span class="hljs-attr">right:</span> <span class="hljs-attr">10</span>, <span class="hljs-attr">left:</span> <span class="hljs-attr">-20</span>, <span class="hljs-attr">bottom:</span> <span class="hljs-attr">0</span> }}&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">CartesianGrid</span> <span class="hljs-attr">strokeDasharray</span>=<span class="hljs-string">&quot;3 3&quot;</span> <span class="hljs-attr">stroke</span>=<span class="hljs-string">&quot;#eee&quot;</span> /&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">XAxis</span> <span class="hljs-attr">dataKey</span>=<span class="hljs-string">&quot;waktu&quot;</span> <span class="hljs-attr">stroke</span>=<span class="hljs-string">&quot;#999&quot;</span> <span class="hljs-attr">fontSize</span>=<span class="hljs-string">{11}</span> <span class="hljs-attr">interval</span>=<span class="hljs-string">&quot;preserveStartEnd&quot;</span> /&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">YAxis</span> <span class="hljs-attr">stroke</span>=<span class="hljs-string">&quot;#999&quot;</span> <span class="hljs-attr">fontSize</span>=<span class="hljs-string">{11}</span> <span class="hljs-attr">domain</span>=<span class="hljs-string">{[</span>&quot;<span class="hljs-attr">auto</span>&quot;, &quot;<span class="hljs-attr">auto</span>&quot;]} /&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">Tooltip</span> <span class="hljs-attr">content</span>=<span class="hljs-string">{</span>&lt;<span class="hljs-attr">CustomTooltip</span> /&gt;</span>} /&gt;
+            <span class="hljs-tag">&lt;<span class="hljs-name">Legend</span> <span class="hljs-attr">formatter</span>=<span class="hljs-string">{(value)</span> =&gt;</span> value === &quot;avg_t&quot; ? &quot;Suhu (°C)&quot; : &quot;Kelembaban (%)&quot;} /&gt;
+            <span class="hljs-tag">&lt;<span class="hljs-name">Line</span> <span class="hljs-attr">type</span>=<span class="hljs-string">&quot;monotone&quot;</span> <span class="hljs-attr">dataKey</span>=<span class="hljs-string">&quot;avg_t&quot;</span> <span class="hljs-attr">stroke</span>=<span class="hljs-string">&quot;#f97316&quot;</span> <span class="hljs-attr">strokeWidth</span>=<span class="hljs-string">{2}</span> <span class="hljs-attr">dot</span>=<span class="hljs-string">{{</span> <span class="hljs-attr">fill:</span> &quot;#<span class="hljs-attr">f97316</span>&quot;, <span class="hljs-attr">r:</span> <span class="hljs-attr">3</span> }} <span class="hljs-attr">connectNulls</span> /&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">Line</span> <span class="hljs-attr">type</span>=<span class="hljs-string">&quot;monotone&quot;</span> <span class="hljs-attr">dataKey</span>=<span class="hljs-string">&quot;avg_h&quot;</span> <span class="hljs-attr">stroke</span>=<span class="hljs-string">&quot;#0077b6&quot;</span> <span class="hljs-attr">strokeWidth</span>=<span class="hljs-string">{2}</span> <span class="hljs-attr">dot</span>=<span class="hljs-string">{{</span> <span class="hljs-attr">fill:</span> &quot;#<span class="hljs-attr">0077b6</span>&quot;, <span class="hljs-attr">r:</span> <span class="hljs-attr">3</span> }} <span class="hljs-attr">connectNulls</span> /&gt;</span>
+          <span class="hljs-tag">&lt;/<span class="hljs-name">LineChart</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">ResponsiveContainer</span>&gt;</span>
+      )}
+    <span class="hljs-tag">&lt;/<span class="hljs-name">div</span>&gt;</span></span>
+  );
+}
+</code></pre>
+<hr>
+<h3>File: <code>react-dashboard/src/components/BlowerControl.jsx</code></h3>
+<p><strong>Deskripsi</strong>: Komponen slider PWM untuk mengontrol kecepatan blower.</p>
+<pre class="hljs"><code><span class="hljs-keyword">import</span> <span class="hljs-title class_">React</span>, { useState, useEffect } <span class="hljs-keyword">from</span> <span class="hljs-string">&quot;react&quot;</span>;
+<span class="hljs-keyword">import</span> { ref, set } <span class="hljs-keyword">from</span> <span class="hljs-string">&quot;firebase/database&quot;</span>;
+<span class="hljs-keyword">import</span> { database } <span class="hljs-keyword">from</span> <span class="hljs-string">&quot;../firebase&quot;</span>;
+<span class="hljs-keyword">import</span> toast <span class="hljs-keyword">from</span> <span class="hljs-string">&quot;react-hot-toast&quot;</span>;
+
+<span class="hljs-keyword">export</span> <span class="hljs-keyword">default</span> <span class="hljs-keyword">function</span> <span class="hljs-title function_">BlowerControl</span>(<span class="hljs-params">{ id, name, speed, onDummyChange, onSpeedChange }</span>) {
+  <span class="hljs-keyword">const</span> [localSpeed, setLocalSpeed] = <span class="hljs-title function_">useState</span>(speed || <span class="hljs-number">0</span>);
+  <span class="hljs-keyword">const</span> <span class="hljs-variable constant_">MAX_RPM</span> = <span class="hljs-number">6000</span>;
+
+  <span class="hljs-title function_">useEffect</span>(<span class="hljs-function">() =&gt;</span> { <span class="hljs-title function_">setLocalSpeed</span>(speed || <span class="hljs-number">0</span>); }, [speed]);
+  <span class="hljs-keyword">const</span> rpm = <span class="hljs-title class_">Math</span>.<span class="hljs-title function_">round</span>((localSpeed / <span class="hljs-number">100</span>) * <span class="hljs-variable constant_">MAX_RPM</span>);
+
+  <span class="hljs-keyword">const</span> <span class="hljs-title function_">handleSliderChange</span> = (<span class="hljs-params">e</span>) =&gt; { <span class="hljs-title function_">setLocalSpeed</span>(<span class="hljs-built_in">parseInt</span>(e.<span class="hljs-property">target</span>.<span class="hljs-property">value</span>, <span class="hljs-number">10</span>)); };
+
+  <span class="hljs-keyword">const</span> <span class="hljs-title function_">handleSliderRelease</span> = <span class="hljs-keyword">async</span> (<span class="hljs-params">e</span>) =&gt; {
+    <span class="hljs-keyword">const</span> finalSpeed = <span class="hljs-built_in">parseInt</span>(e.<span class="hljs-property">target</span>.<span class="hljs-property">value</span>, <span class="hljs-number">10</span>);
+    <span class="hljs-keyword">if</span> (onSpeedChange) { <span class="hljs-title function_">onSpeedChange</span>(finalSpeed); <span class="hljs-keyword">return</span>; }
+    <span class="hljs-keyword">if</span> (onDummyChange) { <span class="hljs-title function_">onDummyChange</span>(finalSpeed); <span class="hljs-keyword">return</span>; }
+    <span class="hljs-keyword">try</span> {
+      <span class="hljs-keyword">await</span> <span class="hljs-title function_">set</span>(<span class="hljs-title function_">ref</span>(database, <span class="hljs-string">`/blowers/<span class="hljs-subst">${id}</span>/speed`</span>), finalSpeed);
+      toast.<span class="hljs-title function_">success</span>(<span class="hljs-string">`<span class="hljs-subst">${name}</span> speed set to <span class="hljs-subst">${finalSpeed}</span>%`</span>);
+    } <span class="hljs-keyword">catch</span> (err) {
+      toast.<span class="hljs-title function_">error</span>(<span class="hljs-string">&quot;Failed to update blower speed!&quot;</span>);
+      <span class="hljs-title function_">setLocalSpeed</span>(speed);
+    }
+  };
+
+  <span class="hljs-keyword">return</span> (
+    <span class="language-xml"><span class="hljs-tag">&lt;<span class="hljs-name">div</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;blower-control-card&quot;</span>&gt;</span>
+      <span class="hljs-tag">&lt;<span class="hljs-name">div</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;bc-header&quot;</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">span</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;bc-subtitle&quot;</span>&gt;</span>AIRFLOW MANAGEMENT<span class="hljs-tag">&lt;/<span class="hljs-name">span</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">div</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;bc-title-row&quot;</span>&gt;</span>
+          <span class="hljs-tag">&lt;<span class="hljs-name">div</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;bc-title-col&quot;</span>&gt;</span><span class="hljs-tag">&lt;<span class="hljs-name">h2</span>&gt;</span>{name}<span class="hljs-tag">&lt;/<span class="hljs-name">h2</span>&gt;</span><span class="hljs-tag">&lt;<span class="hljs-name">h2</span>&gt;</span>Control<span class="hljs-tag">&lt;/<span class="hljs-name">h2</span>&gt;</span><span class="hljs-tag">&lt;/<span class="hljs-name">div</span>&gt;</span>
+          <span class="hljs-tag">&lt;<span class="hljs-name">div</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;bc-rpm-col&quot;</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">span</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;bc-rpm-value&quot;</span>&gt;</span>{rpm.toLocaleString()}<span class="hljs-tag">&lt;/<span class="hljs-name">span</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">span</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;bc-rpm-label&quot;</span>&gt;</span>RPM<span class="hljs-tag">&lt;/<span class="hljs-name">span</span>&gt;</span>
+          <span class="hljs-tag">&lt;/<span class="hljs-name">div</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">div</span>&gt;</span>
+      <span class="hljs-tag">&lt;/<span class="hljs-name">div</span>&gt;</span>
+      <span class="hljs-tag">&lt;<span class="hljs-name">div</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;bc-slider-container&quot;</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">input</span> <span class="hljs-attr">type</span>=<span class="hljs-string">&quot;range&quot;</span> <span class="hljs-attr">min</span>=<span class="hljs-string">&quot;0&quot;</span> <span class="hljs-attr">max</span>=<span class="hljs-string">&quot;100&quot;</span> <span class="hljs-attr">value</span>=<span class="hljs-string">{localSpeed}</span>
+          <span class="hljs-attr">onChange</span>=<span class="hljs-string">{handleSliderChange}</span> <span class="hljs-attr">onMouseUp</span>=<span class="hljs-string">{handleSliderRelease}</span> <span class="hljs-attr">onTouchEnd</span>=<span class="hljs-string">{handleSliderRelease}</span>
+          <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;bc-slider&quot;</span>
+          <span class="hljs-attr">style</span>=<span class="hljs-string">{{</span> <span class="hljs-attr">background:</span> `<span class="hljs-attr">linear-gradient</span>(<span class="hljs-attr">to</span> <span class="hljs-attr">right</span>, #<span class="hljs-attr">d97706</span> <span class="hljs-attr">0</span>%, #<span class="hljs-attr">d97706</span> ${<span class="hljs-attr">localSpeed</span>}%, #<span class="hljs-attr">e5e7eb</span> ${<span class="hljs-attr">localSpeed</span>}%, #<span class="hljs-attr">e5e7eb</span> <span class="hljs-attr">100</span>%)` }}
+        /&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">div</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;bc-slider-labels&quot;</span>&gt;</span><span class="hljs-tag">&lt;<span class="hljs-name">span</span>&gt;</span>OFF<span class="hljs-tag">&lt;/<span class="hljs-name">span</span>&gt;</span><span class="hljs-tag">&lt;<span class="hljs-name">span</span>&gt;</span>50%<span class="hljs-tag">&lt;/<span class="hljs-name">span</span>&gt;</span><span class="hljs-tag">&lt;<span class="hljs-name">span</span>&gt;</span>MAX<span class="hljs-tag">&lt;/<span class="hljs-name">span</span>&gt;</span><span class="hljs-tag">&lt;/<span class="hljs-name">div</span>&gt;</span>
+      <span class="hljs-tag">&lt;/<span class="hljs-name">div</span>&gt;</span>
+    <span class="hljs-tag">&lt;/<span class="hljs-name">div</span>&gt;</span></span>
+  );
+}
+</code></pre>
+<hr>
+<h3>File: <code>react-dashboard/src/components/LoginPage.jsx</code></h3>
+<p><strong>Deskripsi</strong>: Halaman login dengan Firebase Authentication, validasi error, dan UI modern.</p>
+<pre class="hljs"><code><span class="hljs-keyword">import</span> <span class="hljs-title class_">React</span>, { useState } <span class="hljs-keyword">from</span> <span class="hljs-string">&quot;react&quot;</span>;
+<span class="hljs-keyword">import</span> { <span class="hljs-title class_">WiDaySunny</span> } <span class="hljs-keyword">from</span> <span class="hljs-string">&quot;react-icons/wi&quot;</span>;
+<span class="hljs-keyword">import</span> { <span class="hljs-title class_">IoMailOutline</span>, <span class="hljs-title class_">IoLockClosedOutline</span>, <span class="hljs-title class_">IoLogInOutline</span> } <span class="hljs-keyword">from</span> <span class="hljs-string">&quot;react-icons/io5&quot;</span>;
+<span class="hljs-keyword">import</span> { useAuth } <span class="hljs-keyword">from</span> <span class="hljs-string">&quot;../contexts/AuthContext&quot;</span>;
+<span class="hljs-keyword">import</span> toast <span class="hljs-keyword">from</span> <span class="hljs-string">&quot;react-hot-toast&quot;</span>;
+
+<span class="hljs-keyword">export</span> <span class="hljs-keyword">default</span> <span class="hljs-keyword">function</span> <span class="hljs-title function_">LoginPage</span>(<span class="hljs-params"></span>) {
+  <span class="hljs-keyword">const</span> { login } = <span class="hljs-title function_">useAuth</span>();
+  <span class="hljs-keyword">const</span> [email, setEmail] = <span class="hljs-title function_">useState</span>(<span class="hljs-string">&quot;&quot;</span>);
+  <span class="hljs-keyword">const</span> [password, setPassword] = <span class="hljs-title function_">useState</span>(<span class="hljs-string">&quot;&quot;</span>);
+  <span class="hljs-keyword">const</span> [isLoading, setIsLoading] = <span class="hljs-title function_">useState</span>(<span class="hljs-literal">false</span>);
+
+  <span class="hljs-keyword">const</span> <span class="hljs-title function_">handleSubmit</span> = <span class="hljs-keyword">async</span> (<span class="hljs-params">e</span>) =&gt; {
+    e.<span class="hljs-title function_">preventDefault</span>();
+    <span class="hljs-keyword">if</span> (!email || !password) { toast.<span class="hljs-title function_">error</span>(<span class="hljs-string">&quot;Masukkan email dan password!&quot;</span>); <span class="hljs-keyword">return</span>; }
+    <span class="hljs-title function_">setIsLoading</span>(<span class="hljs-literal">true</span>);
+    <span class="hljs-keyword">try</span> {
+      <span class="hljs-keyword">await</span> <span class="hljs-title function_">login</span>(email, password);
+      toast.<span class="hljs-title function_">success</span>(<span class="hljs-string">&quot;Login berhasil!&quot;</span>);
+    } <span class="hljs-keyword">catch</span> (err) {
+      <span class="hljs-keyword">let</span> msg = <span class="hljs-string">&quot;Login gagal!&quot;</span>;
+      <span class="hljs-keyword">if</span> (err.<span class="hljs-property">code</span> === <span class="hljs-string">&quot;auth/user-not-found&quot;</span>) msg = <span class="hljs-string">&quot;Akun tidak ditemukan.&quot;</span>;
+      <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (err.<span class="hljs-property">code</span> === <span class="hljs-string">&quot;auth/wrong-password&quot;</span>) msg = <span class="hljs-string">&quot;Password salah.&quot;</span>;
+      <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (err.<span class="hljs-property">code</span> === <span class="hljs-string">&quot;auth/invalid-email&quot;</span>) msg = <span class="hljs-string">&quot;Format email tidak valid.&quot;</span>;
+      <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (err.<span class="hljs-property">code</span> === <span class="hljs-string">&quot;auth/invalid-credential&quot;</span>) msg = <span class="hljs-string">&quot;Email atau password salah.&quot;</span>;
+      <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (err.<span class="hljs-property">code</span> === <span class="hljs-string">&quot;auth/too-many-requests&quot;</span>) msg = <span class="hljs-string">&quot;Terlalu banyak percobaan.&quot;</span>;
+      toast.<span class="hljs-title function_">error</span>(msg);
+    } <span class="hljs-keyword">finally</span> { <span class="hljs-title function_">setIsLoading</span>(<span class="hljs-literal">false</span>); }
+  };
+
+  <span class="hljs-keyword">return</span> (
+    <span class="language-xml"><span class="hljs-tag">&lt;<span class="hljs-name">div</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;login-page&quot;</span>&gt;</span>
+      <span class="hljs-tag">&lt;<span class="hljs-name">div</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;login-bg-orbs&quot;</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">div</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;login-orb orb-1&quot;</span> /&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">div</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;login-orb orb-2&quot;</span> /&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">div</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;login-orb orb-3&quot;</span> /&gt;</span>
+      <span class="hljs-tag">&lt;/<span class="hljs-name">div</span>&gt;</span>
+      <span class="hljs-tag">&lt;<span class="hljs-name">div</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;login-card&quot;</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">div</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;login-brand&quot;</span>&gt;</span>
+          <span class="hljs-tag">&lt;<span class="hljs-name">div</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;login-logo-circle&quot;</span>&gt;</span><span class="hljs-tag">&lt;<span class="hljs-name">WiDaySunny</span> <span class="hljs-attr">size</span>=<span class="hljs-string">{48}</span> /&gt;</span><span class="hljs-tag">&lt;/<span class="hljs-name">div</span>&gt;</span>
+          <span class="hljs-tag">&lt;<span class="hljs-name">h1</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;login-title&quot;</span>&gt;</span>Solar Dryer IoT<span class="hljs-tag">&lt;/<span class="hljs-name">h1</span>&gt;</span>
+          <span class="hljs-tag">&lt;<span class="hljs-name">p</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;login-subtitle&quot;</span>&gt;</span>Masuk ke dashboard monitoring<span class="hljs-tag">&lt;/<span class="hljs-name">p</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">div</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">form</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;login-form&quot;</span> <span class="hljs-attr">onSubmit</span>=<span class="hljs-string">{handleSubmit}</span>&gt;</span>
+          <span class="hljs-tag">&lt;<span class="hljs-name">div</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;login-field&quot;</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">label</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;login-label&quot;</span> <span class="hljs-attr">htmlFor</span>=<span class="hljs-string">&quot;login-email&quot;</span>&gt;</span>Email<span class="hljs-tag">&lt;/<span class="hljs-name">label</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">div</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;login-input-wrap&quot;</span>&gt;</span>
+              <span class="hljs-tag">&lt;<span class="hljs-name">IoMailOutline</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;login-input-icon&quot;</span> /&gt;</span>
+              <span class="hljs-tag">&lt;<span class="hljs-name">input</span> <span class="hljs-attr">id</span>=<span class="hljs-string">&quot;login-email&quot;</span> <span class="hljs-attr">type</span>=<span class="hljs-string">&quot;email&quot;</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;login-input&quot;</span> <span class="hljs-attr">placeholder</span>=<span class="hljs-string">&quot;nama@email.com&quot;</span>
+                <span class="hljs-attr">value</span>=<span class="hljs-string">{email}</span> <span class="hljs-attr">onChange</span>=<span class="hljs-string">{(e)</span> =&gt;</span> setEmail(e.target.value)} disabled={isLoading} /&gt;
+            <span class="hljs-tag">&lt;/<span class="hljs-name">div</span>&gt;</span>
+          <span class="hljs-tag">&lt;/<span class="hljs-name">div</span>&gt;</span>
+          <span class="hljs-tag">&lt;<span class="hljs-name">div</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;login-field&quot;</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">label</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;login-label&quot;</span> <span class="hljs-attr">htmlFor</span>=<span class="hljs-string">&quot;login-password&quot;</span>&gt;</span>Password<span class="hljs-tag">&lt;/<span class="hljs-name">label</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">div</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;login-input-wrap&quot;</span>&gt;</span>
+              <span class="hljs-tag">&lt;<span class="hljs-name">IoLockClosedOutline</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;login-input-icon&quot;</span> /&gt;</span>
+              <span class="hljs-tag">&lt;<span class="hljs-name">input</span> <span class="hljs-attr">id</span>=<span class="hljs-string">&quot;login-password&quot;</span> <span class="hljs-attr">type</span>=<span class="hljs-string">&quot;password&quot;</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;login-input&quot;</span> <span class="hljs-attr">placeholder</span>=<span class="hljs-string">&quot;••••••••&quot;</span>
+                <span class="hljs-attr">value</span>=<span class="hljs-string">{password}</span> <span class="hljs-attr">onChange</span>=<span class="hljs-string">{(e)</span> =&gt;</span> setPassword(e.target.value)} disabled={isLoading} /&gt;
+            <span class="hljs-tag">&lt;/<span class="hljs-name">div</span>&gt;</span>
+          <span class="hljs-tag">&lt;/<span class="hljs-name">div</span>&gt;</span>
+          <span class="hljs-tag">&lt;<span class="hljs-name">button</span> <span class="hljs-attr">type</span>=<span class="hljs-string">&quot;submit&quot;</span> <span class="hljs-attr">className</span>=<span class="hljs-string">{</span>`<span class="hljs-attr">login-submit</span> ${<span class="hljs-attr">isLoading</span> ? &quot;<span class="hljs-attr">loading</span>&quot; <span class="hljs-attr">:</span> &quot;&quot;}`} <span class="hljs-attr">disabled</span>=<span class="hljs-string">{isLoading}</span>&gt;</span>
+            {isLoading ? <span class="hljs-tag">&lt;<span class="hljs-name">span</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;login-spinner&quot;</span> /&gt;</span> : <span class="hljs-tag">&lt;&gt;</span><span class="hljs-tag">&lt;<span class="hljs-name">IoLogInOutline</span> <span class="hljs-attr">size</span>=<span class="hljs-string">{20}</span> /&gt;</span><span class="hljs-tag">&lt;<span class="hljs-name">span</span>&gt;</span>Masuk<span class="hljs-tag">&lt;/<span class="hljs-name">span</span>&gt;</span><span class="hljs-tag">&lt;/&gt;</span>}
+          <span class="hljs-tag">&lt;/<span class="hljs-name">button</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">form</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">div</span> <span class="hljs-attr">className</span>=<span class="hljs-string">&quot;login-footer&quot;</span>&gt;</span><span class="hljs-tag">&lt;<span class="hljs-name">p</span>&gt;</span>Solar Dryer IoT Monitoring System<span class="hljs-tag">&lt;/<span class="hljs-name">p</span>&gt;</span><span class="hljs-tag">&lt;/<span class="hljs-name">div</span>&gt;</span>
+      <span class="hljs-tag">&lt;/<span class="hljs-name">div</span>&gt;</span></span>
+    &lt;/div&gt;
+  );
+}
+</code></pre>
+
+</body>
+</html>
